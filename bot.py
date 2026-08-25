@@ -84,27 +84,6 @@ class TaskBot(commands.Bot):
         )
         await self.change_presence(status=discord.Status.online, activity=activity)
 
-        # Enviar mensaje de resumen en vivo del día de hoy
-        from utils.embeds import today_briefing_embed
-        from database import get_tasks
-        for guild in self.guilds:
-            channel = guild.system_channel
-            if not channel:
-                for ch in guild.text_channels:
-                    if ch.permissions_for(guild.me).send_messages:
-                        channel = ch
-                        break
-            if channel:
-                try:
-                    tasks = await get_tasks(guild_id=guild.id, status="pending")
-                    embed = today_briefing_embed(tasks, tz_name="America/Bogota")
-                    await channel.send(
-                        content="🚀 **¡Prueba en vivo solicitada! Aquí está el estado y la programación de hoy en hora de Colombia (12h):**",
-                        embed=embed
-                    )
-                    logger.info(f"Resumen del día enviado al canal '{channel.name}' en {guild.name}")
-                except Exception as e:
-                    logger.warning(f"No se pudo enviar resumen en {guild.name}: {e}")
 
 
 

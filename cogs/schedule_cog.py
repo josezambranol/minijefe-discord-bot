@@ -23,6 +23,7 @@ class ScheduleCog(commands.Cog, name="Horario Académico"):
     @app_commands.describe(
         dia="Día específico a consultar o semana completa"
     )
+    @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
     async def schedule_cmd(
         self,
         interaction: discord.Interaction,
@@ -47,6 +48,7 @@ class ScheduleCog(commands.Cog, name="Horario Académico"):
         await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="clase", description="Ver qué clase toca hoy en vivo, la que está en curso o la siguiente")
+    @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
     async def live_class_cmd(self, interaction: discord.Interaction):
         settings = await get_guild_settings(interaction.guild_id)
         tz_name = settings.get("timezone", "America/Bogota")
@@ -55,6 +57,7 @@ class ScheduleCog(commands.Cog, name="Horario Académico"):
         await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="hoy", description="Resumen completo del día (clases de hoy con salones y tareas pendientes)")
+    @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
     async def today_briefing_cmd(self, interaction: discord.Interaction):
         from database import get_tasks
         from utils.embeds import today_briefing_embed
@@ -65,6 +68,7 @@ class ScheduleCog(commands.Cog, name="Horario Académico"):
         embed = today_briefing_embed(tasks, tz_name)
         view = ScheduleView(guild_id=interaction.guild_id)
         await interaction.response.send_message(embed=embed, view=view)
+
 
     @app_commands.command(name="materias", description="Directorio completo de asignaturas, códigos, salones y docentes")
 

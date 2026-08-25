@@ -22,6 +22,7 @@ async def init_db():
                 status TEXT DEFAULT 'pending',
                 reminder_time TEXT DEFAULT '09:00',
                 last_reminded_date TEXT DEFAULT '',
+                overdue_alert_sent INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 completed_at TEXT
             )
@@ -36,13 +37,53 @@ async def init_db():
                 send_dm INTEGER DEFAULT 1
             )
         """)
+
+        # Tabla para evitar spam y mensajes duplicados
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS sent_notifications (
+                notification_key TEXT PRIMARY KEY,
+                sent_at TEXT NOT NULL
+            )
+        """)
         
         # Índices para consultas rápidas
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_guild_status ON tasks(guild_id, status)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_user_id, status)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)")
         
+        # Intentar migrar columna overdue_alert_sent si no existía
+        try:
+            await db.execute("ALTER TABLE tasks ADD COLUMN overdue_alert_sent INTEGER DEFAULT 0")
+        except Exception:
+            pass
+
         await db.commit()
+
+async def has_notification_been_sent(notification_key: str) -> bool:
+    """Verifica si una notificación específica ya fue enviada (Anti-Spam)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT 1 FROM sent_notifications WHERE notification_key = ?", (notification_key,)) as cursor:
+            row = await cursor.fetchone()
+            return row is not None
+
+async def record_notification_sent(notification_key: str) -> bool:
+    """Registra una clave de notificación para no volver a repetirla."""
+    now_iso = datetime.utcnow().isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO sent_notifications (notification_key, sent_at) VALUES (?, ?)",
+            (notification_key, now_iso)
+        )
+        await db.commit()
+        return True
+
+async def mark_overdue_alert_sent(task_id: int) -> bool:
+    """Marca que la alerta roja de vencimiento ya fue enviada para esta tarea."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE tasks SET overdue_alert_sent = 1 WHERE id = ?", (task_id,))
+        await db.commit()
+        return True
+
 
 async def create_task(
     guild_id: int,

@@ -7,7 +7,8 @@ from typing import Tuple
 
 from database import (
     get_all_active_tasks, get_guild_settings, update_last_reminded,
-    mark_task_overdue, get_pending_tasks_due_for_overdue_check
+    mark_task_overdue, has_notification_been_sent, record_notification_sent,
+    mark_overdue_alert_sent
 )
 from utils.embeds import daily_reminder_embed, overdue_alert_embed
 from views.task_views import TaskActionView
@@ -17,7 +18,6 @@ logger = logging.getLogger("TaskBot.Reminders")
 class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.sent_class_reminders = set()  # Formato: "YYYY-MM-DD:day:start_time"
         self.reminder_checker.start()
 
     def cog_unload(self):
@@ -37,7 +37,7 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
         await self.bot.wait_until_ready()
 
     async def check_and_send_class_reminders(self):
-        """Revisa si en 30 minutos empieza alguna clase y envía un aviso."""
+        """Revisa si en 30 minutos empieza alguna clase y envía un aviso único (Anti-Spam)."""
         from utils.schedule_data import SCHEDULE_DATA, get_now, get_day_key_from_datetime, parse_time_str
         from utils.embeds import class_reminder_alert_embed
 
@@ -59,16 +59,20 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
                 cls_start_mins = t_start.hour * 60 + t_start.minute
                 diff = cls_start_mins - now_mins
 
-                reminder_key = f"{today_str}:{day_key}:{cls['start']}:{guild.id}"
+                reminder_key = f"class:{today_str}:{day_key}:{cls['start']}:{guild.id}"
 
-                # Enviar recordatorio cuando falten entre 25 y 30 minutos
-                if 0 <= diff <= 30 and reminder_key not in self.sent_class_reminders:
-                    self.sent_class_reminders.add(reminder_key)
-                    
+                # Enviar recordatorio cuando falten entre 25 y 30 minutos (Solo si no se ha enviado hoy)
+                if 0 <= diff <= 30:
+                    already_sent = await has_notification_been_sent(reminder_key)
+                    if already_sent:
+                        continue
+
+                    # Registrar inmediatamente para evitar condiciones de carrera
+                    await record_notification_sent(reminder_key)
+
                     channel_id = settings.get("reminder_channel_id")
                     channel = guild.get_channel(channel_id) if channel_id else guild.system_channel
                     if not channel:
-                        # Buscar primer canal de texto accesible
                         for ch in guild.text_channels:
                             if ch.permissions_for(guild.me).send_messages:
                                 channel = ch
@@ -81,25 +85,21 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
                                 content=f"🔔 @everyone ¡En **{diff if diff > 0 else 'unos'} minutos** inicia la clase de **{cls['subject']}**!",
                                 embed=embed
                             )
+                            logger.info(f"Aviso de clase enviado: {cls['subject']} en {guild.name}")
                         except Exception as e:
                             logger.warning(f"No se pudo enviar aviso de clase en {guild.name}: {e}")
 
     async def check_and_send_all_reminders(self, force: bool = False) -> Tuple[int, int]:
-
         """
         Verifica tareas que deben recibir recordatorio hoy y tareas que acaban de vencer.
         Retorna (recordatorios_enviados, tareas_vencidas_detectadas).
         """
-        now_utc = datetime.utcnow()
-        now_utc_iso = now_utc.isoformat()
-        
         reminded_count = 0
         overdue_count = 0
 
         # ==========================================
         # 1. VERIFICAR TAREAS VENCIDAS (OVERDUE)
         # ==========================================
-        # Buscamos tareas en 'pending' cuya fecha límite ya pasó
         all_pending_tasks = await get_all_active_tasks()
         
         for task in all_pending_tasks:
@@ -128,21 +128,20 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
                 overdue_count += 1
                 task["status"] = "overdue"
                 
-                # Enviar alerta de vencimiento
-                await self._send_task_notification(
-                    task=task,
-                    settings=settings,
-                    embed=overdue_alert_embed(task, tz_name),
-                    notification_type="overdue"
-                )
+                # Enviar alerta de vencimiento ÚNICAMENTE si no se ha enviado antes (Anti-Spam)
+                if not task.get("overdue_alert_sent"):
+                    await mark_overdue_alert_sent(task["id"])
+                    await self._send_task_notification(
+                        task=task,
+                        settings=settings,
+                        embed=overdue_alert_embed(task, tz_name),
+                        notification_type="overdue"
+                    )
                 continue
 
             # ==========================================
             # 2. VERIFICAR RECORDATORIO DIARIO
             # ==========================================
-            # Se envía si:
-            # - No se ha enviado hoy (last_reminded_date != today_str) O force == True
-            # - La hora actual del servidor >= reminder_time (ej: 09:00) O force == True
             task_rem_time = task.get("reminder_time", "09:00")
             has_reminded_today = (task.get("last_reminded_date") == today_str)
 
@@ -162,6 +161,7 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
                 )
 
         return reminded_count, overdue_count
+
 
     async def _send_task_notification(
         self,

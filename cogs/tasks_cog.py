@@ -35,6 +35,7 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
         descripcion="Detalles u observaciones de la tarea",
         hora_recordatorio="Hora para el recordatorio diario en formato 24h (ej: 09:00)"
     )
+    @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
     async def task_create(
         self,
         interaction: discord.Interaction,
@@ -75,7 +76,6 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
             reminder_time=hora_recordatorio.strip() if hora_recordatorio else "09:00"
         )
 
-
         task_data = await get_task(task_id)
         embed = task_detail_embed(task_data, tz_name)
         view = TaskActionView(task_id=task_id, guild_id=interaction.guild_id, assigned_user_id=target_user.id)
@@ -91,6 +91,7 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
         filtro="Filtrar por estado de la tarea",
         usuario="Ver únicamente las tareas de un usuario específico"
     )
+    @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
     async def list_tasks(
         self,
         interaction: discord.Interaction,
@@ -124,7 +125,9 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
 
     @app_commands.command(name="vencidas", description="Ver exclusivamente el apartado de tareas atrasadas/vencidas")
     @app_commands.describe(usuario="Filtrar por usuario asignado")
+    @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
     async def overdue_tasks_cmd(
+
         self,
         interaction: discord.Interaction,
         usuario: Optional[discord.Member] = None
