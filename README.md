@@ -1,118 +1,35 @@
-# 🤖 TaskBot — Bot de Tareas y Recordatorios Diarios para Discord
+# 🤖 MiniJefe — Bot de Tareas, Recordatorios & Horario Académico (24/7)
 
-Un bot profesional, interactivo y elegante para Discord diseñado para agendar tareas, enviar recordatorios diarios automáticos antes del plazo límite y gestionar de forma estricta las tareas vencidas.
+![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue?logo=python)
+![Discord.py](https://img.shields.io/badge/Discord.py-v2.7-5865F2?logo=discord)
+![Cloud Hosted](https://img.shields.io/badge/Hosted%20on-Render-46E3B7?logo=render)
+![Uptime](https://img.shields.io/badge/Uptime-24%2F7%20Monitored-success?logo=uptimerobot)
+![Timezone](https://img.shields.io/badge/Timezone-America%2FBogota%20(12h)-orange)
+
+**MiniJefe** es un bot interactivo de Discord diseñado específicamente para la gestión académica universitaria, seguimiento estricto de entregas y control de horarios de clase con alertas inteligentes.
 
 ---
 
 ## 🌟 Características Principales
 
-- 📝 **Agendamiento Flexible de Tareas:**
-  - Registra: **Tema/Título**, **Descripción**, **Fecha y Hora Límite (Plazo)**, **Usuario Asignado** y **Hora de Recordatorio Diario**.
-  - Reconoce lenguaje natural y múltiples formatos: `mañana 18:00`, `en 3 dias`, `hoy 22:00`, `30/08/2026 15:30`, etc.
-  - Formulario modal emergente (`/tarea crear`) o parámetros directos.
+### 🎓 1. Horario Universitario de Clases (Formato 12h Colombia)
+- Programación oficial de clases (Lunes a Viernes) en **Edificio Cedesarrollo**.
+- Manejo de horas en formato estándar de 12 horas (`06:45 PM - 09:45 PM`).
+- **🔔 Avisos automáticos 30 minutos antes:** Notifica en el servidor qué clase inicia, en qué salón y con qué docente.
+- **Tarjetas en vivo:** Indica qué clase está en curso y cuenta regresiva para la siguiente.
 
-- ⏰ **Sistema de Recordatorios Diarios Inteligentes:**
-  - Cada día a la hora configurada (ej. `09:00 AM`), el bot envía un recordatorio visual del avance.
-  - Envía la notificación al **canal del servidor configurado** y también por **Mensaje Directo (DM)** al usuario asignado.
-  - Incluye botón directo `✅ Marcar como Completada` en el mismo mensaje.
+### 📝 2. Gestión Inteligente de Tareas & Entregas
+- **Registro con lenguaje natural en español:** Entiende expresiones como `mañana 6:30 pm`, `en 3 dias`, `hoy 8:00 pm`, `30/08 2:00 pm`, `15/09/2026 11:59 pm`.
+- **Formulario Modal interactivo:** Ventana emergente con autocompletado de materias.
+- **Acciones rápidas con botones:** `✅ Completar` (1 clic), `⏰ Posponer`, `🔍 Ver Detalles`, `🗑️ Eliminar`.
 
-- 🚨 **Apartado y Detección de Tareas Vencidas:**
-  - En cuanto expira el plazo límite, el bot cambia el estado de la tarea a **Vencida**, envía una alerta roja y la agrupa en `/vencidas`.
-  - Calcula el tiempo exacto de retraso (ej. *Vencida hace 2 días y 4 horas*).
+### 🚨 3. Recordatorios Diarios & Sección de Vencidas
+- Envía un resumen diario de las tareas activas cada mañana.
+- Al vencerse el plazo, pasa la tarea inmediatamente al apartado `/vencidas` y emite una alerta roja con el tiempo exacto de retraso.
 
-- 🎛️ **Panel Interactivo con Botones:**
-  - `✅ Completar`: Finaliza la tarea en 1 clic.
-  - `⏰ Posponer`: Abre una ventana emergente para reprogramar la fecha límite.
-  - `🔍 Ver Detalles`: Muestra la ficha técnica completa.
-  - `🗑️ Eliminar`: Borra la tarea (solo asignado, creador o admins).
-
-- 📊 **Estadísticas y Resumen:**
-  - Comando `/estadisticas` con tasa de cumplimiento, total de tareas registradas, pendientes y vencidas.
-
----
-
-## 📁 Estructura del Proyecto
-
-```text
-discord-task-bot/
-├── .env.example          # Plantilla de variables de entorno
-├── .env                  # Tu archivo con el DISCORD_TOKEN
-├── requirements.txt      # Dependencias de Python
-├── bot.py                # Punto de entrada y configuración del bot
-├── database.py           # Capa de datos con SQLite asíncrono (aiosqlite)
-├── test_bot.py           # Script de pruebas automáticas
-├── utils/
-│   ├── date_parser.py    # Parser de fechas en español y cálculo de urgencia
-│   └── embeds.py         # Tarjetas visuales, alertas y badges de estado
-├── views/
-│   ├── task_modal.py     # Ventana modal emergente para crear tareas
-│   └── task_views.py     # Botoneras interactivas (Completar, Posponer, etc.)
-└── cogs/
-    ├── tasks_cog.py      # Comandos slash de tareas (/tarea, /tareas, /vencidas)
-    ├── admin_cog.py      # Configuración del servidor (/config)
-    └── reminders_loop.py # Ciclo en segundo plano para recordatorios y alertas
-```
-
----
-
-## 🚀 Guía de Instalación y Puesta en Marcha
-
-### Paso 1: Crear la Aplicación en Discord Developer Portal
-
-1. Entra a [Discord Developer Portal](https://discord.com/developers/applications).
-2. Haz clic en **"New Application"** y dale un nombre (ej. `TaskBot`).
-3. Ve a la pestaña **"Bot"** en el menú izquierdo:
-   - Haz clic en **"Reset Token"** y **copia tu Token secreto**.
-   - En la sección **"Privileged Gateway Intents"**, activa:
-     - ✅ **Server Members Intent**
-     - ✅ **Message Content Intent**
-   - Guarda los cambios (**Save Changes**).
-
-### Paso 2: Invitar el Bot a tu Servidor
-
-1. En el Developer Portal, ve a **"OAuth2"** > **"URL Generator"**.
-2. En **SCOPES**, marca:
-   - `bot`
-   - `applications.commands`
-3. En **BOT PERMISSIONS**, marca:
-   - `Send Messages`
-   - `Embed Links`
-   - `Attach Files`
-   - `Read Message History`
-   - `Use External Emojis`
-   - `Manage Messages` (opcional)
-   *(O simplemente marca `Administrator` si es tu servidor de pruebas)*.
-4. Copia la URL generada al final, pégala en tu navegador y selecciona tu servidor de Discord.
-
----
-
-### Paso 3: Configurar el archivo `.env`
-
-Abre el archivo `.env` en la carpeta `discord-task-bot` y coloca tu token:
-
-```env
-DISCORD_TOKEN=MTE5OTk...tu_token_aqui...
-DEFAULT_TIMEZONE=America/Bogota
-DEFAULT_REMINDER_TIME=09:00
-```
-
----
-
-### Paso 4: Iniciar el Bot
-
-Abre una terminal en la carpeta del proyecto y ejecuta:
-
-```powershell
-# En Windows (usando el entorno virtual creado):
-.\.venv\Scripts\python bot.py
-```
-
-Al iniciar verás en la consola:
-```text
-[INFO] Inicializando base de datos SQLite...
-[INFO] ¡Sincronizados 7 comandos de aplicación exitosamente!
-[INFO] 🤖 Bot conectado como: TaskBot#1234
-```
+### ☁️ 4. Arquitectura 24/7 en la Nube
+- Desplegado en **Render.com** como servicio web continuo.
+- Servidor web interno de salud (`/health`) monitoreado cada 5 minutos por **UptimeRobot** para evitar la suspensión por inactividad.
 
 ---
 
@@ -120,29 +37,63 @@ Al iniciar verás en la consola:
 
 | Comando | Descripción |
 |---|---|
-| `/tarea crear` | Abre el formulario emergente para crear una tarea (puedes vincular la materia). |
-| `/tareas` | Muestra el panel interactivo con pestañas de *Pendientes*, *Vencidas* y *Completadas*. |
-| `/vencidas` | Acceso directo exclusivo al apartado de tareas retrasadas con alerta visual roja. |
-| `/horario [dia]` | Panel interactivo del horario de clases con menú selector y botones por día. |
-| `/clase` | Tarjeta en vivo que indica qué clase está en curso o cuál es la siguiente hoy con cuenta regresiva. |
-| `/materias` | Directorio con docentes, salones de Cedesarrollo y códigos de materia. |
-| `/tarea ver [id]` | Consulta los detalles completos y botones de acción de una tarea por su ID. |
-| `/tarea completar [id]` | Marca una tarea como terminada. |
-| `/tarea posponer [id] [nuevo_plazo]` | Amplía la fecha límite de una tarea (ej: `mañana 20:00`). |
-| `/tarea eliminar [id]` | Borra una tarea de la base de datos. |
-| `/estadisticas` | Muestra el tablero con porcentaje de cumplimiento y resumen total. |
-| `/config canal-recordatorios [canal]` | Establece el canal donde se publicarán los recordatorios diarios y avisos de clase. |
-| `/config zona-horaria [zona]` | Configura la zona horaria del servidor (ej: `America/Bogota`, `America/Mexico_City`). |
-| `/config enviar-md [activar]` | Activa o desactiva las notificaciones por Mensaje Directo (DM). |
-| `/config ver` | Muestra los ajustes actuales del servidor. |
-| `/probar-recordatorios` | Fuerza la ejecución inmediata del ciclo de recordatorios para pruebas. |
-
+| `/hoy` | 📋 Resumen completo del día: Clases de hoy con salones y lista de tareas pendientes. |
+| `/clase` | 🎓 Tarjeta en vivo que indica qué clase está en curso o cuál es la siguiente con cuenta regresiva. |
+| `/horario [dia]` | 🗓️ Panel interactivo del horario con botones rápidos (`Lunes` a `Viernes`) y vista semanal. |
+| `/materias` | 📚 Directorio completo con códigos de materia, salones de Cedesarrollo y profesores. |
+| `/tarea crear` | 📝 Abre el formulario emergente para agendar una tarea vinculada a una materia y fecha límite. |
+| `/tareas [filtro]` | 🗂️ Gestor interactivo con filtros: *Pendientes*, *Vencidas*, *Completadas* y *Todas*. |
+| `/vencidas` | 🚨 Acceso directo exclusivo al apartado de tareas retrasadas. |
+| `/tarea ver [id]` | 🔍 Consulta la ficha técnica completa de una tarea. |
+| `/tarea completar [id]` | ✅ Marca una tarea como finalizada. |
+| `/tarea posponer [id]` | ⏰ Reprograma la fecha y hora límite de una entrega. |
+| `/tarea eliminar [id]` | 🗑️ Elimina una tarea del sistema. |
+| `/estadisticas` | 📊 Tablero de rendimiento con porcentaje de cumplimiento y resumen total. |
+| `/config canal-recordatorios` | 📢 Configura el canal oficial donde se publicarán los avisos diarios y alertas de clase. |
+| `/presentar` | 👋 Muestra la tarjeta oficial de bienvenida y guía de uso para los miembros del servidor. |
 
 ---
 
-## 💡 Nota sobre WhatsApp vs. Discord
+## 📅 Distribución Semanal de Clases (Cedesarrollo)
 
-> **¿Por qué Discord es ideal para este caso de uso?**
-> - Discord ofrece soporte nativo para **botones interactivos**, **formularios modales desplegables**, **menciones con alertas inmediatas** y **tarjetas visuales (Embeds)** con colores de urgencia.
-> - En WhatsApp, Meta restringe drásticamente las cuentas personales que usan librerías no oficiales (como Puppeteer/Baileys) aplicando bloqueos de número frecuentes.
-> - Si en el futuro deseas enviar notificaciones a WhatsApp de forma oficial, se puede conectar este mismo backend SQLite con la **WhatsApp Cloud API** oficial mediante Webhooks y plantillas autorizadas.
+| Día | Horario (12h) | Asignatura & Código | Salón | Docente |
+|---|---|---|---|---|
+| **🔵 Lunes** | `06:45 PM - 08:15 PM`<br>`08:15 PM - 09:45 PM` | **Visualización de Datos I** (`PROFESIO 10270C2T2`)<br>**Electiva I** (`ELE_PROF 10272C2T2`) | `LABSB_E403`<br>`LABSB_E403` | Diana Paola Beetar Baraja<br>Fabio García Ramírez |
+| **🟢 Martes** | `06:45 PM - 09:45 PM` | **Desarrollo de Software II** (`PROFESIO 4007C4T4`) | `LABSB_E104` | Ronald Carrascal Carreazo |
+| **🟡 Miércoles** | `06:45 PM - 09:00 PM` | **Bases de Datos II** (`PROFESIO 10282C3T3`) | `LABSB_F501` | Jorge Luis Chavarriaga Vargas |
+| **🟠 Jueves** | `06:45 PM - 08:15 PM`<br>`08:15 PM - 09:45 PM` | **Inglés III** (`INTEGRAL 10278C2T2`)<br>**Redes de Computadoras** (`PROFESIO 10271C2T2`) | `AULSB_D102`<br>`LABSB_E403` | Jeimmy Victoria Devoz Díaz<br>Heybertt Moreno Díaz |
+| **🟣 Viernes** | `07:30 PM - 09:45 PM` | **Ecuaciones Diferenciales** (`BAS_CIEN 5799C3HT3`) | `AULSB_C304` | Javier Mendoza Beltrán |
+
+---
+
+## 🛠️ Tecnologías y Estructura del Proyecto
+
+```text
+minijefe-discord-bot/
+├── .env.example          # Plantilla segura de variables de entorno (sin credenciales)
+├── .gitignore            # Bloqueo de seguridad para tokens y base de datos
+├── bot.py                # Entrada principal y servidor web de salud 24/7
+├── database.py           # Base de datos asíncrona SQLite (aiosqlite)
+├── requirements.txt      # Dependencias del proyecto
+├── cogs/
+│   ├── tasks_cog.py      # Comandos de tareas (/tarea, /tareas, /vencidas, /presentar)
+│   ├── schedule_cog.py   # Comandos de horario (/horario, /clase, /hoy, /materias)
+│   ├── admin_cog.py      # Configuración del servidor (/config)
+│   └── reminders_loop.py # Ciclo en segundo plano de recordatorios y avisos 30 min antes
+├── utils/
+│   ├── date_parser.py    # Parser de fechas en español y cálculo de urgencia en 12h
+│   ├── embeds.py         # Diseños visuales con paleta de colores y badges
+│   └── schedule_data.py  # Estructura del horario y cálculo de clases en vivo
+└── views/
+    ├── task_modal.py     # Ventana emergente para agendar tareas
+    ├── task_views.py     # Botoneras interactivas (Completar, Posponer, etc.)
+    └── schedule_views.py # Menú desplegable y botones por día
+```
+
+---
+
+## 🚀 Despliegue en la Nube (24/7)
+
+1. **Configurar Variables:** Crear un archivo `.env` basado en `.env.example` con `DISCORD_TOKEN`, `DEFAULT_TIMEZONE=America/Bogota` y `DEFAULT_REMINDER_TIME=09:00`.
+2. **Render.com:** Conectar el repositorio como **Web Service** con runtime `Python 3`, Build Command `pip install -r requirements.txt` y Start Command `python bot.py`.
+3. **UptimeRobot:** Agregar la URL pública de Render (ej. `https://tu-app.onrender.com`) con un intervalo de 5 minutos para mantener la instancia activa 24/7.
