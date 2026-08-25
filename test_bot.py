@@ -25,20 +25,33 @@ async def test_database_and_parser():
     tz = "America/Bogota"
     
     # Test 1: Date parser tests
-    d1, err = parse_task_date("mañana 15:00", tz)
-    assert err is None, f"Failed parse 'mañana 15:00': {err}"
+    d1, err1, t1 = parse_task_date("mañana 15:00", tz)
+    assert err1 is None, f"Failed parse 'mañana 15:00': {err1}"
     assert d1 is not None
-    print(f"  [OK] 'mañana 15:00' -> {d1}")
+    print(f"  [OK] 'mañana 15:00' -> {d1} ({t1})")
 
-    d2, err = parse_task_date("en 3 dias", tz)
-    assert err is None, f"Failed parse 'en 3 dias': {err}"
+    d2, err2, t2 = parse_task_date("en 3 dias", tz)
+    assert err2 is None, f"Failed parse 'en 3 dias': {err2}"
     assert d2 is not None
-    print(f"  [OK] 'en 3 dias' -> {d2}")
+    print(f"  [OK] 'en 3 dias' -> {d2} ({t2})")
 
-    d3, err = parse_task_date("30/08/2026 18:30", tz)
-    assert err is None, f"Failed parse '30/08/2026 18:30': {err}"
+    d3, err3, t3 = parse_task_date("30/08/2026 18:30", tz)
+    assert err3 is None, f"Failed parse '30/08/2026 18:30': {err3}"
     assert d3.day == 30 and d3.month == 8 and d3.year == 2026
-    print(f"  [OK] '30/08/2026 18:30' -> {d3}")
+    print(f"  [OK] '30/08/2026 18:30' -> {d3} ({t3})")
+
+    d4, err4, t4 = parse_task_date("15 de septiembre 6:00 pm", tz)
+    assert err4 is None
+    print(f"  [OK] '15 de septiembre 6:00 pm' -> {d4} ({t4})")
+
+    d5, err5, t5 = parse_task_date("a finales de mes", tz)
+    assert err5 is None
+    print(f"  [OK] 'a finales de mes' -> {d5} ({t5})")
+
+    d6, err6, t6 = parse_task_date("por definir", tz)
+    assert err6 is None
+    print(f"  [OK] 'por definir' -> {d6} ({t6})")
+
 
     time_str, urgency, _ = format_time_left((datetime.now(pytz.timezone(tz)) + timedelta(days=2)).isoformat(), tz)
     print(f"  [OK] format_time_left (+2 days) -> {time_str} | Urgencia: {urgency}")

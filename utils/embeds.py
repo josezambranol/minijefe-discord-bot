@@ -24,7 +24,8 @@ def get_status_badge(status: str, urgency: str = "NORMAL") -> str:
 
 def task_detail_embed(task: Dict[str, Any], tz_name: str = "America/Bogota") -> discord.Embed:
     """Crea una tarjeta detallada para una tarea individual."""
-    time_str, urgency, _ = format_time_left(task["due_date"], tz_name)
+    due_date_text = task.get("due_date_text")
+    time_str, urgency, _ = format_time_left(task["due_date"], tz_name, due_date_text=due_date_text)
     status = task.get("status", "pending")
     
     if status == "completed":
@@ -47,14 +48,17 @@ def task_detail_embed(task: Dict[str, Any], tz_name: str = "America/Bogota") -> 
     embed.add_field(name="👤 Asignada a", value=f"<@{task['assigned_user_id']}>", inline=True)
     embed.add_field(name="✍️ Creada por", value=f"<@{task['creator_id']}>", inline=True)
     
-    formatted_due = format_date_display(task["due_date"], tz_name)
-    embed.add_field(name="📅 Fecha y Hora Límite", value=f"`{formatted_due}`", inline=True)
-    embed.add_field(name="⏳ Plazo / Tiempo", value=time_str, inline=True)
-    embed.add_field(name="⏰ Hora Recordatorio Diario", value=f"`{task.get('reminder_time', '09:00')}`", inline=True)
+    formatted_due = format_date_display(task["due_date"], tz_name, due_date_text=due_date_text)
+    embed.add_field(name="📅 Plazo / Fecha Límite", value=f"`{formatted_due}`", inline=True)
+    embed.add_field(name="⏳ Estado del Plazo", value=time_str, inline=True)
+    embed.add_field(name="⏰ Recordatorio Diario", value=f"`{task.get('reminder_time', '09:00')}`", inline=True)
 
     if task.get("completed_at"):
         completed_fmt = format_date_display(task["completed_at"], tz_name)
-        embed.add_field(name="🎉 Completada el", value=f"`{completed_fmt}`", inline=False)
+        comp_by = f"<@{task['completed_by_id']}>" if task.get("completed_by_id") else "Un miembro"
+        embed.add_field(name="🎉 Finalizada y Calificada", value=f"Por {comp_by} el `{completed_fmt}`", inline=False)
+        if task.get("grade_notes"):
+            embed.add_field(name="🏆 Nota / Observación", value=f"*{task['grade_notes']}*", inline=False)
 
     embed.set_footer(text=f"ID de tarea: {task['id']} • Zona Horaria: {tz_name}")
     return embed
@@ -89,18 +93,21 @@ def task_list_embed(
     )
 
     for task in tasks[:15]: # Discord limita campos a 25
-        time_str, urgency, _ = format_time_left(task["due_date"], tz_name)
+        due_text = task.get("due_date_text")
+        time_str, urgency, _ = format_time_left(task["due_date"], tz_name, due_date_text=due_text)
         status = task.get("status", "pending")
         badge = get_status_badge(status, urgency)
         
         assigned = f"<@{task['assigned_user_id']}>"
-        due_fmt = format_date_display(task["due_date"], tz_name)
+        due_fmt = format_date_display(task["due_date"], tz_name, due_date_text=due_text)
         
         field_value = (
-            f"**Asignado:** {assigned} | **Límite:** `{due_fmt}`\n"
+            f"**Asignado:** {assigned} | **Plazo:** `{due_fmt}`\n"
             f"{time_str}"
         )
-        if task.get("description"):
+        if task.get("grade_notes"):
+            field_value += f"\n🏆 **Nota:** *{task['grade_notes']}*"
+        elif task.get("description"):
             desc_preview = task["description"][:60] + ("..." if len(task["description"]) > 60 else "")
             field_value += f"\n*💬 {desc_preview}*"
 
@@ -116,6 +123,7 @@ def task_list_embed(
         embed.set_footer(text=f"Total: {len(tasks)} tareas registradas.")
 
     return embed
+
 
 def daily_reminder_embed(task: Dict[str, Any], tz_name: str = "America/Bogota") -> discord.Embed:
     """Embed enviado en el recordatorio diario recurrente."""

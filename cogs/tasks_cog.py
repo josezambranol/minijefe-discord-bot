@@ -25,13 +25,12 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
 
     task_group = app_commands.Group(name="tarea", description="Comandos para gestionar tareas y recordatorios")
 
-
-    @task_group.command(name="crear", description="Agendar una nueva tarea con fecha límite y recordatorio diario")
+    @task_group.command(name="crear", description="Agendar una nueva tarea con fecha límite (en números, letras o flexible)")
     @app_commands.describe(
         asignar_a="Usuario al que se le asignará la tarea (por defecto tú mismo)",
         tema="Título o tema de la tarea (si no se especifica, se abrirá un formulario emergente)",
         materia="Materia o asignatura a la que pertenece esta tarea (opcional)",
-        plazo="Fecha y hora límite (ej: mañana 18:00, 2026-08-30 15:00, en 3 dias)",
+        plazo="Fecha o plazo (ej: 15 de septiembre 6 pm, a fin de mes, mañana 8 pm, por definir)",
         descripcion="Detalles u observaciones de la tarea",
         hora_recordatorio="Hora para el recordatorio diario en formato 24h (ej: 09:00)"
     )
@@ -50,7 +49,6 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
         settings = await get_guild_settings(interaction.guild_id)
         tz_name = settings.get("timezone", "America/Bogota")
 
-        # Si especificó materia, concatenarla con estilo al tema
         final_title = f"[{materia}] {tema.strip()}" if materia and tema else (tema.strip() if tema else None)
 
         # Si no especificó tema ni plazo, abrir modal emergente
@@ -59,11 +57,8 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
             await interaction.response.send_modal(modal)
             return
 
-        # Si especificó parámetros en el comando, crearlo directamente
-        parsed_dt, err = parse_task_date(plazo, tz_name)
-        if err:
-            await interaction.response.send_message(f"❌ **Error en la fecha límite:** {err}", ephemeral=True)
-            return
+        # Parseo universal (letras o números)
+        parsed_dt, _, display_text = parse_task_date(plazo, tz_name)
 
         task_id = await create_task(
             guild_id=interaction.guild_id,
@@ -73,6 +68,7 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
             title=final_title,
             description=descripcion.strip() if descripcion else None,
             due_date_iso=parsed_dt.isoformat(),
+            due_date_text=display_text,
             reminder_time=hora_recordatorio.strip() if hora_recordatorio else "09:00"
         )
 
@@ -81,7 +77,7 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
         view = TaskActionView(task_id=task_id, guild_id=interaction.guild_id, assigned_user_id=target_user.id)
 
         await interaction.response.send_message(
-            content=f"🎉 **¡Tarea agendada con éxito!** Se asignó a {target_user.mention}.",
+            content=f"🎉 **¡Tarea agendada con éxito!** Plazo: `{display_text}` | Asignada a {target_user.mention}.",
             embed=embed,
             view=view
         )
@@ -108,7 +104,7 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
         titles = {
             "pendientes": "📋 Tareas Pendientes",
             "vencidas": "🔴 Tareas Vencidas (Atrasadas)",
-            "completadas": "✅ Tareas Completadas",
+            "completadas": "✅ Tareas Completadas / Calificadas",
             "todas": "📑 Todas las Tareas Registradas"
         }
         
@@ -127,7 +123,6 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
     @app_commands.describe(usuario="Filtrar por usuario asignado")
     @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
     async def overdue_tasks_cmd(
-
         self,
         interaction: discord.Interaction,
         usuario: Optional[discord.Member] = None
@@ -162,33 +157,49 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
         view = TaskActionView(task_id=id, guild_id=interaction.guild_id, assigned_user_id=task["assigned_user_id"])
         await interaction.response.send_message(embed=embed, view=view)
 
-    @task_group.command(name="completar", description="Marcar una tarea como completada")
-    @app_commands.describe(id="ID numérico de la tarea a completar")
-    async def complete_task_cmd(self, interaction: discord.Interaction, id: int):
+    @app_commands.command(name="completar", description="Marcar una tarea como finalizada/calificada y silenciar sus recordatorios")
+    @app_commands.describe(
+        id="ID numérico de la tarea",
+        nota_o_comentario="Nota o comentario de la entrega (ej: 5.0, Entregado en Classroom)"
+    )
+    async def complete_direct_cmd(self, interaction: discord.Interaction, id: int, nota_o_comentario: Optional[str] = None):
+        await self._handle_completion(interaction, id, nota_o_comentario)
+
+    @task_group.command(name="completar", description="Marcar una tarea como completada/calificada")
+    @app_commands.describe(
+        id="ID numérico de la tarea",
+        nota_o_comentario="Nota o comentario de la entrega (ej: 5.0, Entregado en Classroom)"
+    )
+    async def complete_task_cmd(self, interaction: discord.Interaction, id: int, nota_o_comentario: Optional[str] = None):
+        await self._handle_completion(interaction, id, nota_o_comentario)
+
+    async def _handle_completion(self, interaction: discord.Interaction, id: int, nota: Optional[str] = None):
         task = await get_task(id)
         if not task or task["guild_id"] != interaction.guild_id:
             await interaction.response.send_message(f"❌ No se encontró la tarea `#{id}`.", ephemeral=True)
             return
 
         if task["status"] == "completed":
-            await interaction.response.send_message(f"ℹ️ La tarea `#{id}` ya estaba completada.", ephemeral=True)
+            await interaction.response.send_message(f"ℹ️ La tarea `#{id}` ya estaba finalizada.", ephemeral=True)
             return
 
-        await mark_task_completed(id)
+        await mark_task_completed(id, completed_by_id=interaction.user.id, grade_notes=nota)
         settings = await get_guild_settings(interaction.guild_id)
         tz_name = settings.get("timezone", "America/Bogota")
-        task["status"] = "completed"
-        embed = task_detail_embed(task, tz_name)
+        
+        updated_task = await get_task(id)
+        embed = task_detail_embed(updated_task, tz_name)
 
+        note_str = f" con nota/observación: *«{nota}»*" if nota else ""
         await interaction.response.send_message(
-            content=f"🎉 **¡Tarea #{id} completada exitosamente por {interaction.user.mention}!**",
+            content=f"🎉 **¡Tarea #{id} finalizada y calificada por {interaction.user.mention}!**{note_str}\n*(Los recordatorios automáticos han sido cancelados)*",
             embed=embed
         )
 
-    @task_group.command(name="posponer", description="Ampliar el plazo de una tarea")
+    @task_group.command(name="posponer", description="Ampliar el plazo de una tarea (en letras o números)")
     @app_commands.describe(
         id="ID de la tarea",
-        nuevo_plazo="Nueva fecha límite (ej: mañana 20:00, 2026-09-01 12:00, en 3 dias)"
+        nuevo_plazo="Nuevo plazo (ej: 15 de septiembre 6 pm, a fin de mes, en 1 semana)"
     )
     async def postpone_task_cmd(self, interaction: discord.Interaction, id: int, nuevo_plazo: str):
         task = await get_task(id)
@@ -198,10 +209,7 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
 
         settings = await get_guild_settings(interaction.guild_id)
         tz_name = settings.get("timezone", "America/Bogota")
-        parsed_dt, err = parse_task_date(nuevo_plazo, tz_name)
-        if err:
-            await interaction.response.send_message(f"❌ **Error:** {err}", ephemeral=True)
-            return
+        parsed_dt, _, display_text = parse_task_date(nuevo_plazo, tz_name)
 
         await postpone_task(id, parsed_dt.isoformat())
         updated_task = await get_task(id)
@@ -209,7 +217,7 @@ class TasksCog(commands.Cog, name="Gestión de Tareas"):
         view = TaskActionView(task_id=id, guild_id=interaction.guild_id, assigned_user_id=task["assigned_user_id"])
 
         await interaction.response.send_message(
-            content=f"⏰ **Tarea #{id} pospuesta con éxito.**",
+            content=f"⏰ **Tarea #{id} pospuesta con éxito.** Nuevo plazo: `{display_text}`",
             embed=embed,
             view=view
         )

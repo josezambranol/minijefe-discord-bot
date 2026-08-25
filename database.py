@@ -19,10 +19,13 @@ async def init_db():
                 title TEXT NOT NULL,
                 description TEXT,
                 due_date TEXT NOT NULL,
+                due_date_text TEXT,
                 status TEXT DEFAULT 'pending',
                 reminder_time TEXT DEFAULT '09:00',
                 last_reminded_date TEXT DEFAULT '',
                 overdue_alert_sent INTEGER DEFAULT 0,
+                grade_notes TEXT,
+                completed_by_id INTEGER,
                 created_at TEXT NOT NULL,
                 completed_at TEXT
             )
@@ -51,13 +54,21 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_user_id, status)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)")
         
-        # Intentar migrar columna overdue_alert_sent si no existía
-        try:
-            await db.execute("ALTER TABLE tasks ADD COLUMN overdue_alert_sent INTEGER DEFAULT 0")
-        except Exception:
-            pass
+        # Migraciones automáticas de columnas
+        migrations = [
+            "ALTER TABLE tasks ADD COLUMN overdue_alert_sent INTEGER DEFAULT 0",
+            "ALTER TABLE tasks ADD COLUMN due_date_text TEXT",
+            "ALTER TABLE tasks ADD COLUMN grade_notes TEXT",
+            "ALTER TABLE tasks ADD COLUMN completed_by_id INTEGER"
+        ]
+        for mig in migrations:
+            try:
+                await db.execute(mig)
+            except Exception:
+                pass
 
         await db.commit()
+
 
 async def has_notification_been_sent(notification_key: str) -> bool:
     """Verifica si una notificación específica ya fue enviada (Anti-Spam)."""
@@ -93,6 +104,7 @@ async def create_task(
     title: str,
     description: Optional[str],
     due_date_iso: str,
+    due_date_text: Optional[str] = None,
     reminder_time: str = "09:00"
 ) -> int:
     """Crea una nueva tarea y retorna su ID."""
@@ -101,12 +113,12 @@ async def create_task(
         cursor = await db.execute("""
             INSERT INTO tasks (
                 guild_id, channel_id, creator_id, assigned_user_id,
-                title, description, due_date, status,
+                title, description, due_date, due_date_text, status,
                 reminder_time, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
         """, (
             guild_id, channel_id, creator_id, assigned_user_id,
-            title, description or "", due_date_iso,
+            title, description or "", due_date_iso, due_date_text or "",
             reminder_time, created_at_iso
         ))
         await db.commit()
@@ -171,17 +183,18 @@ async def mark_task_overdue(task_id: int) -> bool:
         await db.commit()
         return True
 
-async def mark_task_completed(task_id: int) -> bool:
-    """Marca una tarea como completada."""
+async def mark_task_completed(task_id: int, completed_by_id: Optional[int] = None, grade_notes: Optional[str] = None) -> bool:
+    """Marca una tarea como completada/calificada por cualquier usuario y silencia recordatorios."""
     completed_at = datetime.utcnow().isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("""
             UPDATE tasks 
-            SET status = 'completed', completed_at = ? 
+            SET status = 'completed', completed_at = ?, completed_by_id = ?, grade_notes = ?
             WHERE id = ?
-        """, (completed_at, task_id))
+        """, (completed_at, completed_by_id, grade_notes, task_id))
         await db.commit()
         return cursor.rowcount > 0
+
 
 async def postpone_task(task_id: int, new_due_date_iso: str) -> bool:
     """Pospone una tarea cambiando su fecha límite y restaurando estado a 'pending'."""

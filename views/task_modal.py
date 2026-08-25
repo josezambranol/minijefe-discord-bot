@@ -28,14 +28,14 @@ class CreateTaskModal(discord.ui.Modal, title="📝 Nueva Tarea & Recordatorio")
     )
 
     task_due_date = discord.ui.TextInput(
-        label="Fecha y Hora Límite (Plazo)",
-        placeholder="Ej: mañana 18:00 | 2026-08-30 15:00 | en 3 dias",
+        label="Plazo / Fecha (Letras, Números o Flexible)",
+        placeholder="Ej: 15 de septiembre 6 pm | a fin de mes | mañana 8 pm | por definir",
         required=True,
-        max_length=50
+        max_length=80
     )
 
     task_reminder_time = discord.ui.TextInput(
-        label="Hora del Recordatorio Diario (HH:MM en 24h)",
+        label="Hora del Recordatorio Diario (HH:MM)",
         placeholder="09:00 (o 08:30, 14:00, etc.)",
         default="09:00",
         required=False,
@@ -47,23 +47,13 @@ class CreateTaskModal(discord.ui.Modal, title="📝 Nueva Tarea & Recordatorio")
         settings = await get_guild_settings(interaction.guild_id)
         tz_name = settings.get("timezone", self.default_tz)
 
-        # 2. Validar y parsear la fecha límite
-        parsed_dt, error_msg = parse_task_date(self.task_due_date.value, tz_name)
-        if error_msg:
-            await interaction.response.send_message(
-                f"❌ **Error en la fecha límite:** {error_msg}",
-                ephemeral=True
-            )
-            return
+        # 2. Validar y parsear la fecha límite (letras o números)
+        parsed_dt, _, display_text = parse_task_date(self.task_due_date.value, tz_name)
 
         # 3. Validar formato de hora del recordatorio
         rem_time = self.task_reminder_time.value.strip() or "09:00"
         if not re.match(r"^(?:[01]\d|2[0-3]):[0-5]\d$", rem_time):
-            await interaction.response.send_message(
-                "❌ **Error en la hora de recordatorio:** Debe tener el formato `HH:MM` en 24 horas (ej. `09:00`, `14:30`).",
-                ephemeral=True
-            )
-            return
+            rem_time = "09:00"
 
         # 4. Guardar en Base de Datos
         task_id = await create_task(
@@ -74,6 +64,7 @@ class CreateTaskModal(discord.ui.Modal, title="📝 Nueva Tarea & Recordatorio")
             title=self.task_title.value.strip(),
             description=self.task_description.value.strip() if self.task_description.value else None,
             due_date_iso=parsed_dt.isoformat(),
+            due_date_text=display_text,
             reminder_time=rem_time
         )
 
@@ -82,7 +73,8 @@ class CreateTaskModal(discord.ui.Modal, title="📝 Nueva Tarea & Recordatorio")
         view = TaskActionView(task_id=task_id, guild_id=interaction.guild_id, assigned_user_id=self.assigned_user.id)
 
         await interaction.response.send_message(
-            content=f"🎉 **¡Tarea agendada con éxito!** Se asignó a {self.assigned_user.mention}.",
+            content=f"🎉 **¡Tarea agendada con éxito!** Plazo: `{display_text}` | Asignada a {self.assigned_user.mention}.",
             embed=embed,
             view=view
         )
+
