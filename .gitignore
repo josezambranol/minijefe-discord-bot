@@ -1,0 +1,25 @@
+# Variables de entorno y credenciales secretas (¡NUNCA SUBIR A GITHUB!)
+.env
+*.env
+
+# Entorno virtual de Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Base de datos local
+*.db
+*.sqlite3
+tasks.db
+
+# Archivos del sistema y logs
+*.log
+.DS_Store
+Thumbs.db
+
+# Configuración de editores
+.vscode/
+.idea/
