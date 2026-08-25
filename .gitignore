@@ -15,7 +15,14 @@ __pycache__/
 *.sqlite3
 tasks.db
 
+# Archivos comprimidos y paquetes
+*.zip
+*.tar
+*.gz
+*.rar
+
 # Archivos del sistema y logs
+
 *.log
 .DS_Store
 Thumbs.db
