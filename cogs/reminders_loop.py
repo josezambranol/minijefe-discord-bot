@@ -72,13 +72,7 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
                     # Registrar inmediatamente para evitar condiciones de carrera
                     await record_notification_sent(reminder_key)
 
-                    channel_id = settings.get("reminder_channel_id")
-                    channel = guild.get_channel(channel_id) if channel_id else guild.system_channel
-                    if not channel:
-                        for ch in guild.text_channels:
-                            if ch.permissions_for(guild.me).send_messages:
-                                channel = ch
-                                break
+                    channel = get_strict_reminder_channel(guild, settings)
 
                     if channel:
                         try:
@@ -182,14 +176,11 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
         if not guild:
             return
 
-        # 1. Determinar el canal de envío
-        channel = None
-        if settings.get("reminder_channel_id"):
-            channel = guild.get_channel(settings["reminder_channel_id"])
-        
-        # Si no hay canal de recordatorios configurado, usar el canal donde se creó la tarea
+        # 1. Determinar estrictamente el canal oficial (#private)
+        channel = get_strict_reminder_channel(guild, settings)
         if not channel:
-            channel = guild.get_channel(task["channel_id"])
+            logger.warning(f"No se encontró canal oficial (#private) para enviar recordatorio de tarea #{task['id']}")
+            return
 
         view = TaskActionView(
             task_id=task["id"],
