@@ -11,6 +11,7 @@ from database import (
     mark_overdue_alert_sent
 )
 from utils.embeds import daily_reminder_embed, overdue_alert_embed
+from utils.auto_cleaner import send_clean_channel_message
 from views.task_views import TaskActionView
 
 logger = logging.getLogger("TaskBot.Reminders")
@@ -40,6 +41,7 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
         """Revisa si en 30 minutos empieza alguna clase y envía un aviso único (Anti-Spam)."""
         from utils.schedule_data import SCHEDULE_DATA, get_now, get_day_key_from_datetime, parse_time_str
         from utils.embeds import class_reminder_alert_embed
+        from utils.team_data import get_team_mentions
 
         for guild in self.bot.guilds:
             settings = await get_guild_settings(guild.id)
@@ -81,9 +83,14 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
                     if channel:
                         try:
                             embed = class_reminder_alert_embed(cls, minutes_before=diff if diff > 0 else 30, tz_name=tz_name)
-                            await channel.send(
-                                content=f"🔔 @everyone ¡En **{diff if diff > 0 else 'unos'} minutos** inicia la clase de **{cls['subject']}**!",
-                                embed=embed
+                            team_mentions = get_team_mentions(guild)
+                            msg_content = f"🔔 {team_mentions} ¡En **{diff if diff > 0 else 'unos'} minutos** inicia la clase de **{cls['subject']}**!"
+                            await send_clean_channel_message(
+                                bot=self.bot,
+                                channel=channel,
+                                category="class_reminder_alert",
+                                embed=embed,
+                                content=msg_content
                             )
                             logger.info(f"Aviso de clase enviado: {cls['subject']} en {guild.name}")
                         except Exception as e:
@@ -190,13 +197,22 @@ class RemindersLoopCog(commands.Cog, name="Recordatorios Automáticos"):
             assigned_user_id=task["assigned_user_id"]
         )
 
-        # 2. Enviar al canal del servidor mencionando al usuario
+        # 2. Enviar al canal del servidor mencionando al equipo con auto-limpieza
         if channel and channel.permissions_for(guild.me).send_messages:
             try:
-                mention_text = f"🔔 Atención <@{task['assigned_user_id']}>"
+                team_mentions = get_team_mentions(guild)
+                mention_text = f"🔔 {team_mentions} Recordatorio de entrega pendiente:"
                 if notification_type == "overdue":
-                    mention_text = f"🚨 **ALERTA DE VENCIMIENTO** <@{task['assigned_user_id']}>"
-                await channel.send(content=mention_text, embed=embed, view=view)
+                    mention_text = f"🚨 {team_mentions} **¡ALERTA DE ENTREGA VENCIDA DEL EQUIPO!**"
+                
+                await send_clean_channel_message(
+                    bot=self.bot,
+                    channel=channel,
+                    category=f"task_{task['id']}_{notification_type}",
+                    embed=embed,
+                    view=view,
+                    content=mention_text
+                )
             except Exception as e:
                 logger.warning(f"No se pudo enviar mensaje al canal {channel.id}: {e}")
 

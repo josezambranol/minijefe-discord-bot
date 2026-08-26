@@ -1,5 +1,7 @@
 import discord
 from typing import Dict, Any, List, Optional
+from datetime import datetime
+import pytz
 from .date_parser import format_time_left, format_date_display
 
 # Paleta de colores temáticos
@@ -22,6 +24,20 @@ def get_status_badge(status: str, urgency: str = "NORMAL") -> str:
     else:
         return "🔵 **EN PROGRESO**"
 
+def get_discord_timestamp_str(date_iso: str, tz_name: str = "America/Bogota") -> str:
+    """Convierte una fecha ISO a tag de timestamp de Discord (<t:UNIX:R>)."""
+    try:
+        tz = pytz.timezone(tz_name)
+        dt = datetime.fromisoformat(date_iso)
+        if dt.tzinfo is None:
+            dt = tz.localize(dt)
+        else:
+            dt = dt.astimezone(tz)
+        unix_ts = int(dt.timestamp())
+        return f"<t:{unix_ts}:R>"
+    except Exception:
+        return ""
+
 def task_detail_embed(task: Dict[str, Any], tz_name: str = "America/Bogota") -> discord.Embed:
     """Crea una tarjeta detallada para una tarea individual."""
     due_date_text = task.get("due_date_text")
@@ -40,45 +56,47 @@ def task_detail_embed(task: Dict[str, Any], tz_name: str = "America/Bogota") -> 
     badge = get_status_badge(status, urgency)
     embed = discord.Embed(
         title=f"📌 #{task['id']} — {task['title']}",
-        description=task.get("description") or "*Sin descripción adicional*",
+        description=task.get("description") or "*Sin observaciones adicionales*",
         color=color
     )
     
     embed.add_field(name="📊 Estado", value=badge, inline=True)
-    embed.add_field(name="👤 Asignada a", value=f"<@{task['assigned_user_id']}>", inline=True)
-    embed.add_field(name="✍️ Creada por", value=f"<@{task['creator_id']}>", inline=True)
+    embed.add_field(name="👥 Destinatarios", value="Todo el equipo (5)", inline=True)
+    embed.add_field(name="✍️ Agendada por", value=f"<@{task['creator_id']}>", inline=True)
     
     formatted_due = format_date_display(task["due_date"], tz_name, due_date_text=due_date_text)
-    embed.add_field(name="📅 Plazo / Fecha Límite", value=f"`{formatted_due}`", inline=True)
+    ts_tag = get_discord_timestamp_str(task["due_date"], tz_name)
+    plazo_val = f"`{formatted_due}`" + (f" ({ts_tag})" if ts_tag else "")
+    
+    embed.add_field(name="📅 Plazo / Fecha Límite", value=plazo_val, inline=True)
     embed.add_field(name="⏳ Estado del Plazo", value=time_str, inline=True)
     embed.add_field(name="⏰ Recordatorio Diario", value=f"`{task.get('reminder_time', '09:00')}`", inline=True)
 
     if task.get("completed_at"):
         completed_fmt = format_date_display(task["completed_at"], tz_name)
-        comp_by = f"<@{task['completed_by_id']}>" if task.get("completed_by_id") else "Un miembro"
-        embed.add_field(name="🎉 Finalizada y Calificada", value=f"Por {comp_by} el `{completed_fmt}`", inline=False)
-        if task.get("grade_notes"):
-            embed.add_field(name="🏆 Nota / Observación", value=f"*{task['grade_notes']}*", inline=False)
+        comp_by = f"<@{task['completed_by_id']}>" if task.get("completed_by_id") else "Un integrante"
+        comp_ts = get_discord_timestamp_str(task["completed_at"], tz_name)
+        comp_text = f"Por {comp_by} el `{completed_fmt}`" + (f" ({comp_ts})" if comp_ts else "")
+        embed.add_field(name="✅ Tarea Completada", value=comp_text, inline=False)
 
-    embed.set_footer(text=f"ID de tarea: {task['id']} • Zona Horaria: {tz_name}")
+    embed.set_footer(text=f"MiniJefe • ID de tarea: #{task['id']} • Zona: {tz_name}")
     return embed
 
 def task_list_embed(
     tasks: List[Dict[str, Any]],
-    title: str = "📋 Lista de Tareas",
-    filter_desc: str = "Mostrando todas las tareas pendientes",
+    title: str = "📋 Lista de Tareas del Equipo",
+    filter_desc: str = "Mostrando todas las tareas pendientes del equipo",
     tz_name: str = "America/Bogota"
 ) -> discord.Embed:
     """Crea un embed con la lista de tareas formateada."""
     if not tasks:
         embed = discord.Embed(
             title=title,
-            description="🎉 **¡No hay tareas en esta categoría! Todo al día.**",
+            description="🎉 **¡No hay tareas en esta categoría! El equipo está al día.**",
             color=COLOR_SUCCESS
         )
         return embed
 
-    # Color según el tipo de lista
     if "Vencidas" in title:
         color = COLOR_DANGER
     elif "Completadas" in title:
@@ -92,23 +110,18 @@ def task_list_embed(
         color=color
     )
 
-    for task in tasks[:15]: # Discord limita campos a 25
+    for task in tasks[:15]:
         due_text = task.get("due_date_text")
         time_str, urgency, _ = format_time_left(task["due_date"], tz_name, due_date_text=due_text)
-        status = task.get("status", "pending")
-        badge = get_status_badge(status, urgency)
-        
-        assigned = f"<@{task['assigned_user_id']}>"
+        creator = f"<@{task['creator_id']}>"
         due_fmt = format_date_display(task["due_date"], tz_name, due_date_text=due_text)
         
         field_value = (
-            f"**Asignado:** {assigned} | **Plazo:** `{due_fmt}`\n"
+            f"**Agendada por:** {creator} | **Plazo:** `{due_fmt}`\n"
             f"{time_str}"
         )
-        if task.get("grade_notes"):
-            field_value += f"\n🏆 **Nota:** *{task['grade_notes']}*"
-        elif task.get("description"):
-            desc_preview = task["description"][:60] + ("..." if len(task["description"]) > 60 else "")
+        if task.get("description"):
+            desc_preview = task["description"][:65] + ("..." if len(task["description"]) > 65 else "")
             field_value += f"\n*💬 {desc_preview}*"
 
         embed.add_field(
@@ -120,15 +133,15 @@ def task_list_embed(
     if len(tasks) > 15:
         embed.set_footer(text=f"Mostrando 15 de {len(tasks)} tareas. Usa los filtros para refinar.")
     else:
-        embed.set_footer(text=f"Total: {len(tasks)} tareas registradas.")
+        embed.set_footer(text=f"Total: {len(tasks)} tareas registradas en el equipo.")
 
     return embed
-
 
 def daily_reminder_embed(task: Dict[str, Any], tz_name: str = "America/Bogota") -> discord.Embed:
     """Embed enviado en el recordatorio diario recurrente."""
     time_str, urgency, _ = format_time_left(task["due_date"], tz_name)
     due_fmt = format_date_display(task["due_date"], tz_name)
+    ts_tag = get_discord_timestamp_str(task["due_date"], tz_name)
 
     if urgency == "TODAY":
         color = COLOR_WARNING
@@ -142,17 +155,19 @@ def daily_reminder_embed(task: Dict[str, Any], tz_name: str = "America/Bogota") 
 
     embed = discord.Embed(
         title=f"{header} — #{task['id']}",
-        description=f"Hola <@{task['assigned_user_id']}>, tienes una tarea asignada pendiente por resolver:",
+        description="Hola equipo, tenemos una entrega pendiente en agenda:",
         color=color
     )
-    embed.add_field(name="📌 Tema / Tarea", value=f"**{task['title']}**", inline=False)
+    embed.add_field(name="📌 Asignatura / Tema", value=f"**{task['title']}**", inline=False)
     if task.get("description"):
         embed.add_field(name="📝 Descripción", value=task["description"], inline=False)
     
-    embed.add_field(name="📅 Fecha Límite", value=f"`{due_fmt}`", inline=True)
+    plazo_txt = f"`{due_fmt}`" + (f" ({ts_tag})" if ts_tag else "")
+    embed.add_field(name="📅 Fecha Límite", value=plazo_txt, inline=True)
     embed.add_field(name="⏳ Estado del Plazo", value=time_str, inline=True)
+    embed.add_field(name="✍️ Agendada por", value=f"<@{task['creator_id']}>", inline=True)
     
-    embed.set_footer(text="💡 Puedes marcarla como completada usando el botón de abajo.")
+    embed.set_footer(text="💡 Pulsa '✅ Completar' cuando el equipo termine para apagar los recordatorios.")
     return embed
 
 def overdue_alert_embed(task: Dict[str, Any], tz_name: str = "America/Bogota") -> discord.Embed:
@@ -161,25 +176,26 @@ def overdue_alert_embed(task: Dict[str, Any], tz_name: str = "America/Bogota") -
     due_fmt = format_date_display(task["due_date"], tz_name)
 
     embed = discord.Embed(
-        title=f"🚨 ¡TAREA VENCIDA! — #{task['id']}",
-        description=f"Atención <@{task['assigned_user_id']}>, el plazo para completar esta tarea ha expirado.",
+        title=f"🚨 ¡ENTREGA VENCIDA DEL EQUIPO! — #{task['id']}",
+        description="Atención equipo, el plazo límite para esta entrega ha expirado.",
         color=COLOR_DANGER
     )
-    embed.add_field(name="📌 Tema", value=f"**{task['title']}**", inline=False)
+    embed.add_field(name="📌 Asignatura / Tema", value=f"**{task['title']}**", inline=False)
     embed.add_field(name="📅 Plazo Original", value=f"`{due_fmt}`", inline=True)
     embed.add_field(name="⏳ Tiempo Transcurrido", value=time_str, inline=True)
+    embed.add_field(name="✍️ Agendada por", value=f"<@{task['creator_id']}>", inline=True)
     
     if task.get("description"):
-        embed.add_field(name="📝 Detalles", value=task["description"], inline=False)
+        embed.add_field(name="📝 Observaciones", value=task["description"], inline=False)
         
-    embed.set_footer(text="⚠️ Esta tarea ha sido movida a la sección de Tareas Vencidas.")
+    embed.set_footer(text="⚠️ Esta tarea ha sido movida a la sección de Tareas Vencidas (/vencidas).")
     return embed
 
 def stats_embed(stats: Dict[str, int], server_name: str) -> discord.Embed:
     """Embed de resumen del panel de estadísticas."""
     embed = discord.Embed(
         title=f"📊 Resumen de Tareas — {server_name}",
-        description="Estado general de tareas asignadas en este servidor:",
+        description="Estado general de tareas asignadas al equipo:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         color=COLOR_INFO
     )
     embed.add_field(name="📋 Total Registradas", value=f"**{stats['total']}**", inline=True)
@@ -191,6 +207,7 @@ def stats_embed(stats: Dict[str, int], server_name: str) -> discord.Embed:
         rate = (stats['completed'] / stats['total']) * 100
         embed.add_field(name="🎯 Tasa de Cumplimiento", value=f"**{rate:.1f}%**", inline=False)
 
+    embed.set_footer(text="MiniJefe • Tablero de Seguimiento Académico")
     return embed
 
 # =========================================================================
@@ -229,19 +246,17 @@ def day_schedule_embed(day_key: str, tz_name: str = "America/Bogota") -> discord
         color=day_info["color"]
     )
 
-    for i, cls in enumerate(classes, 1):
+    for cls in classes:
         t_start = parse_time_str(cls["start"])
         t_end = parse_time_str(cls["end"])
         start_12 = format_time_12h(cls["start"])
         end_12 = format_time_12h(cls["end"])
 
-        # Estado en vivo si es hoy
         live_badge = ""
         if is_today:
             if t_start <= now_time <= t_end:
                 live_badge = " 🔥 **[EN CURSO AHORA]**"
             elif now_time < t_start:
-                # Calcular minutos restantes
                 mins_left = (t_start.hour * 60 + t_start.minute) - (now_time.hour * 60 + now_time.minute)
                 hours_left = mins_left // 60
                 mins_rem = mins_left % 60
@@ -261,7 +276,7 @@ def day_schedule_embed(day_key: str, tz_name: str = "America/Bogota") -> discord
         )
         embed.add_field(name=field_name, value=field_value, inline=False)
 
-    embed.set_footer(text=f"MiniJefe • Horario Cedesarrollo • Hora de Colombia ({tz_name})")
+    embed.set_footer(text=f"MiniJefe • Cedesarrollo • Hora Colombia ({tz_name})")
     return embed
 
 def full_week_schedule_embed(tz_name: str = "America/Bogota") -> discord.Embed:
@@ -270,7 +285,7 @@ def full_week_schedule_embed(tz_name: str = "America/Bogota") -> discord.Embed:
     
     embed = discord.Embed(
         title="🗓️ Horario Académico Semanal Completo",
-        description="Distribución de materias de Lunes a Viernes (Hora de Colombia):\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        description="Distribución de materias de Lunes a Viernes en Cedesarrollo:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         color=COLOR_INFO
     )
 
@@ -279,7 +294,7 @@ def full_week_schedule_embed(tz_name: str = "America/Bogota") -> discord.Embed:
         for cls in day["classes"]:
             start_12 = format_time_12h(cls['start'])
             end_12 = format_time_12h(cls['end'])
-            classes_text.append(f"• **`{start_12} - {end_12}`** {cls['icon']} **{cls['subject']}**\n  ↳ 📍 `{cls['room']}` | 👨‍🏫 *{cls['teacher']}*")
+            classes_text.append(f"• **`{start_12} - {end_12}`** {cls['icon']} **{cls['subject']}**\n  ↳ 📍 `{cls['location']}` | 👨‍🏫 *{cls['teacher']}*")
         
         embed.add_field(
             name=f"{day['emoji']} {day['name'].upper()}",
@@ -287,7 +302,7 @@ def full_week_schedule_embed(tz_name: str = "America/Bogota") -> discord.Embed:
             inline=False
         )
 
-    embed.set_footer(text=f"MiniJefe • Cedesarrollo • Hora de Colombia")
+    embed.set_footer(text="MiniJefe • Horario de Ingeniería • Hora Colombia")
     return embed
 
 def today_live_class_embed(tz_name: str = "America/Bogota") -> discord.Embed:
@@ -301,7 +316,7 @@ def today_live_class_embed(tz_name: str = "America/Bogota") -> discord.Embed:
     if not day_key:
         embed = discord.Embed(
             title=f"🏖️ ¡Hoy es {day_name}!",
-            description="No tienes clases programadas para el fin de semana. ¡Disfruta tu descanso!",
+            description="No tienes clases programadas para el fin de semana. ¡A descansar!",
             color=COLOR_SUCCESS
         )
         return embed
@@ -309,7 +324,7 @@ def today_live_class_embed(tz_name: str = "America/Bogota") -> discord.Embed:
     time_now_12 = now.strftime('%I:%M %p').lstrip('0')
     embed = discord.Embed(
         title=f"🎓 Estado Académico de Hoy — {day_name}",
-        description=f"Hora actual en Colombia: `{time_now_12}`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        description=f"🕒 Hora actual en Colombia: `{time_now_12}`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         color=COLOR_INFO
     )
 
@@ -318,7 +333,7 @@ def today_live_class_embed(tz_name: str = "America/Bogota") -> discord.Embed:
         start_12 = format_time_12h(current_cls["start"])
         end_12 = format_time_12h(current_cls["end"])
         embed.add_field(
-            name=f"🔥 CLASE EN CURSO AHORA: {current_cls['icon']} {current_cls['subject']}",
+            name=f"🔥 CLASE EN CURSO: {current_cls['icon']} {current_cls['subject']}",
             value=(
                 f"⏰ **Horario:** `{start_12} - {end_12}`\n"
                 f"📍 **Salón:** `{current_cls['location']}`\n"
@@ -353,14 +368,13 @@ def today_live_class_embed(tz_name: str = "America/Bogota") -> discord.Embed:
         embed.color = COLOR_SUCCESS
         embed.add_field(
             name="🎉 Jornada Finalizada",
-            value="¡Ya terminaron todas las clases programadas para el día de hoy!",
+            value="¡Ya terminaron todas las clases del día de hoy!",
             inline=False
         )
 
-    # Añadir resumen de las materias de hoy
     day_info = SCHEDULE_DATA[day_key]
     summary = " • ".join([f"{c['icon']} {c['subject']} (`{format_time_12h(c['start'])}`)" for c in day_info["classes"]])
-    embed.add_field(name="📋 Resumen de Hoy", value=summary, inline=False)
+    embed.add_field(name="📋 Materias de Hoy", value=summary, inline=False)
     embed.set_footer(text="MiniJefe • Consulta cualquier día con /horario")
     return embed
 
@@ -371,21 +385,21 @@ def class_reminder_alert_embed(cls: Dict[str, Any], minutes_before: int, tz_name
     end_12 = format_time_12h(cls["end"])
 
     embed = discord.Embed(
-        title=f"🔔 ¡RECORDATORIO: TU CLASE COMIENZA EN {minutes_before} MINUTOS!",
-        description=f"Prepárate para tu clase de **{cls['subject']}**.",
+        title=f"🔔 ¡RECORDATORIO: CLASE EN {minutes_before} MINUTOS!",
+        description=f"Atención equipo, en breve comienza la clase de **{cls['subject']}**.",
         color=COLOR_WARNING
     )
-    embed.add_field(name="📚 Materia", value=f"{cls['icon']} **{cls['subject']}**", inline=False)
-    embed.add_field(name="⏰ Horario de Clase", value=f"`{start_12} - {end_12}`", inline=True)
-    embed.add_field(name="📍 Salón Asignado", value=f"`{cls['location']}`", inline=True)
+    embed.add_field(name="📚 Asignatura", value=f"{cls['icon']} **{cls['subject']}**", inline=False)
+    embed.add_field(name="⏰ Horario", value=f"`{start_12} - {end_12}`", inline=True)
+    embed.add_field(name="📍 Salón", value=f"`{cls['location']}`", inline=True)
     embed.add_field(name="👨‍🏫 Docente", value=f"`{cls['teacher']}`", inline=False)
-    embed.add_field(name="🏷️ Código de Materia", value=f"`{cls['code']}`", inline=True)
-    embed.set_footer(text="MiniJefe • Recordatorio automático de clases • Hora Colombia")
+    embed.add_field(name="🏷️ Código", value=f"`{cls['code']}`", inline=True)
+    embed.set_footer(text="MiniJefe • Aviso de Horario • Cedesarrollo")
     return embed
 
 def today_briefing_embed(tasks: List[Dict[str, Any]], tz_name: str = "America/Bogota") -> discord.Embed:
     """Embed de resumen general del día (Clases + Tareas pendientes)."""
-    from .schedule_data import get_current_and_next_class, get_now, SCHEDULE_DATA, get_day_key_from_datetime, format_time_12h, parse_time_str
+    from .schedule_data import SCHEDULE_DATA, get_now, get_day_key_from_datetime, format_time_12h
     
     now = get_now(tz_name)
     day_key = get_day_key_from_datetime(now)
@@ -393,7 +407,7 @@ def today_briefing_embed(tasks: List[Dict[str, Any]], tz_name: str = "America/Bo
     date_now_str = now.strftime('%d/%m/%Y')
 
     embed = discord.Embed(
-        title=f"📋 Resumen del Día — {now.strftime('%A').capitalize()} {date_now_str}",
+        title=f"📋 Resumen Académico del Día — {now.strftime('%A').capitalize()} {date_now_str}",
         description=f"🕒 **Hora actual en Colombia:** `{time_now_12}`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         color=COLOR_INFO
     )
@@ -407,89 +421,108 @@ def today_briefing_embed(tasks: List[Dict[str, Any]], tz_name: str = "America/Bo
             e12 = format_time_12h(cls["end"])
             classes_lines.append(f"{cls['icon']} **{cls['subject']}**\n↳ ⏰ `{s12} - {e12}` | 📍 `{cls['location']}` | 👨‍🏫 *{cls['teacher']}*")
         embed.add_field(
-            name="🎓 Clases Programadas para Hoy",
+            name="🎓 Clases de Hoy (Cedesarrollo)",
             value="\n\n".join(classes_lines),
             inline=False
         )
     else:
         embed.add_field(
             name="🎓 Clases de Hoy",
-            value="🎉 ¡Hoy no hay clases programadas!",
+            value="🎉 ¡Hoy no hay clases programadas! Descanso.",
             inline=False
         )
 
     # 2. Tareas pendientes
     if tasks:
         task_lines = []
-        for t in tasks[:5]:
+        for t in tasks[:6]:
             due_fmt = format_date_display(t["due_date"], tz_name)
-            task_lines.append(f"• **#{t['id']} {t['title']}** — Límite: `{due_fmt}` (<@{t['assigned_user_id']}>)")
+            ts_tag = get_discord_timestamp_str(t["due_date"], tz_name)
+            task_lines.append(f"• **#{t['id']} {t['title']}** — `{due_fmt}` {ts_tag} (<@{t['assigned_user_id']}>)")
         embed.add_field(
-            name=f"📝 Tareas Pendientes Registradas ({len(tasks)})",
+            name=f"📝 Entregas Pendientes Activas ({len(tasks)})",
             value="\n".join(task_lines),
             inline=False
         )
     else:
         embed.add_field(
-            name="📝 Tareas Pendientes",
-            value="✨ **¡No hay tareas pendientes en este momento! Todo al día.**\nPuedes agregar nuevas con `/tarea crear`.",
+            name="📝 Entregas Pendientes",
+            value="✨ **¡No hay entregas pendientes en este momento! Todo al día.**",
             inline=False
         )
 
-    embed.set_footer(text="MiniJefe • Tu asistente personal de tareas y horario")
+    embed.set_footer(text="MiniJefe • Asistente Académico del Equipo")
     return embed
 
+def team_directory_embed(guild: Optional[discord.Guild], member_task_counts: Optional[Dict[int, int]] = None) -> discord.Embed:
+    """Embed que presenta a los 5 integrantes del equipo oficial de MiniJefe."""
+    from .team_data import get_team_directory_info
+
+    embed = discord.Embed(
+        title="👥 Equipo Oficial de MiniJefe (The Squad)",
+        description=(
+            "Este bot está configurado y optimizado específicamente para los **5 integrantes del grupo**:\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=COLOR_INFO
+    )
+
+    directory = get_team_directory_info(guild)
+    for entry in directory:
+        info = entry["info"]
+        member = entry["member"]
+        mention = entry["mention"]
+        
+        status_str = "🟢 En el servidor" if member else "⚪ Fuera de línea"
+        pending_txt = ""
+        if member and member_task_counts and member.id in member_task_counts:
+            cnt = member_task_counts[member.id]
+            pending_txt = f" • **{cnt}** pendientes"
+
+        field_name = f"{info['emoji']} {info['display_name']} (`{info['role']}`)"
+        field_value = f"• **Usuario:** {mention}\n• **Estado:** {status_str}{pending_txt}"
+        embed.add_field(name=field_name, value=field_value, inline=False)
+
+    embed.set_footer(text="MiniJefe • Alertas y tareas personalizadas sin spam de @everyone")
+    return embed
 
 def welcome_introduction_embed() -> discord.Embed:
     """Embed oficial de presentación de MiniJefe para el servidor."""
     embed = discord.Embed(
         title="👋 ¡Hola a todos! Soy MiniJefe 🤖",
         description=(
-            "He sido asignado a este servidor como su **Asistente de Tareas & Horario Académico**.\n"
-            "Mi trabajo es mantener todo en orden, recordarles sus entregas a tiempo y asegurar que nadie falte ni llegue tarde a clases.\n"
+            "Soy el **Asistente Informativo de Tareas & Horario Académico** del equipo.\n"
+            "Mi propósito es mantenernos al día con las clases de Cedesarrollo y el seguimiento de entregas pendientes.\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         ),
         color=COLOR_INFO
     )
 
     embed.add_field(
-        name="📝 1. Gestión Inteligente de Tareas",
+        name="👥 1. Equipo Oficial (5 Integrantes)",
+        value="Configurado especialmente para: **jote**, **jordy** (dev), **rafxzz**, **ByLogan** y **SEVINHO**.\n*(No usamos menciones globales `@everyone` ni `@here`)*.",
+        inline=False
+    )
+
+    embed.add_field(
+        name="📝 2. Gestión Rápida de Entregas",
         value=(
-            "• `/tarea crear` — Agenda una tarea con fecha límite y recordatorio diario.\n"
-            "• `/tareas` — Panel interactivo para ver pendientes, vencidas o completadas.\n"
-            "• Reconozco fechas en español como `mañana 18:00`, `en 3 dias`, `hoy 20:00` o `30/08 15:00`."
+            "• `/tarea crear` — Agenda una entrega con autocompletado de materias y lenguaje natural.\n"
+            "• `/tareas` — Panel interactivo de tareas (Pendientes, Vencidas, Completadas).\n"
+            "• **1 Clic:** Botón directo **`✅ Completar`** para marcar tareas finalizadas al instante."
         ),
         inline=False
     )
 
     embed.add_field(
-        name="⏰ 2. Recordatorios Diarios & Alertas",
+        name="⏰ 3. Avisos Inteligentes & Horario (12h)",
         value=(
-            "• Cada mañana enviaré un recordatorio de las tareas pendientes hasta que se cumpla el plazo.\n"
-            "• Los recordatorios tienen un botón directo **`✅ Completar`** para marcar la tarea en 1 clic.\n"
-            "• Si una tarea vence sin realizarse, la pasaré a `/vencidas` y enviaré una alerta roja."
+            "• `/horario` — Horario semanal interactivo por días con salones y profesores.\n"
+            "• `/clase` — Vista en vivo de qué clase está en curso y la que sigue.\n"
+            "• **Avisos automáticos:** Notificación del bot 30 minutos antes del inicio de clase."
         ),
         inline=False
     )
 
-    embed.add_field(
-        name="🎓 3. Horario Universitario Integrado (Cedesarrollo)",
-        value=(
-            "• `/horario` — Consulta el horario semanal interactivo con botones por día.\n"
-            "• `/clase` — Tarjeta en vivo con la clase que está en curso ahora o la siguiente.\n"
-            "• `/materias` — Directorio de salones, códigos y profesores.\n"
-            "• **Aviso 30 min antes:** Les avisaré automáticamente 30 minutos antes de cada clase."
-        ),
-        inline=False
-    )
-
-    embed.add_field(
-        name="⚙️ 4. Configuración del Servidor",
-        value="• `/config canal-recordatorios` — Elige en qué canal debo publicar los avisos diarios.",
-        inline=False
-    )
-
-    embed.set_footer(text="MiniJefe • Escribe /horario o /tarea crear para comenzar a usarme.")
+    embed.set_footer(text="MiniJefe • Escribe /horario, /hoy o /tarea crear para comenzar.")
     return embed
-
-

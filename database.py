@@ -1,6 +1,6 @@
 import aiosqlite
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "tasks.db")
@@ -49,6 +49,17 @@ async def init_db():
             )
         """)
         
+        # Tabla para registrar el último mensaje de cada panel/comando y auto-borrar los anteriores
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS last_panel_messages (
+                guild_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
+                channel_id INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                PRIMARY KEY (guild_id, category)
+            )
+        """)
+        
         # Índices para consultas rápidas
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_guild_status ON tasks(guild_id, status)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_user_id, status)")
@@ -79,7 +90,7 @@ async def has_notification_been_sent(notification_key: str) -> bool:
 
 async def record_notification_sent(notification_key: str) -> bool:
     """Registra una clave de notificación para no volver a repetirla."""
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT OR REPLACE INTO sent_notifications (notification_key, sent_at) VALUES (?, ?)",
@@ -108,7 +119,7 @@ async def create_task(
     reminder_time: str = "09:00"
 ) -> int:
     """Crea una nueva tarea y retorna su ID."""
-    created_at_iso = datetime.utcnow().isoformat()
+    created_at_iso = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("""
             INSERT INTO tasks (
@@ -184,8 +195,8 @@ async def mark_task_overdue(task_id: int) -> bool:
         return True
 
 async def mark_task_completed(task_id: int, completed_by_id: Optional[int] = None, grade_notes: Optional[str] = None) -> bool:
-    """Marca una tarea como completada/calificada por cualquier usuario y silencia recordatorios."""
-    completed_at = datetime.utcnow().isoformat()
+    """Marca una tarea como completada por cualquier usuario y silencia recordatorios."""
+    completed_at = datetime.now(timezone.utc).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute("""
             UPDATE tasks 
@@ -285,3 +296,23 @@ async def get_task_stats(guild_id: int, user_id: Optional[int] = None) -> Dict[s
                 "overdue": row[2] or 0,
                 "completed": row[3] or 0
             }
+
+async def save_last_panel_message(guild_id: int, category: str, channel_id: int, message_id: int) -> bool:
+    """Guarda o actualiza el ID del último mensaje enviado de una categoría para auto-borrarlo al enviar uno nuevo."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT OR REPLACE INTO last_panel_messages (guild_id, category, channel_id, message_id)
+            VALUES (?, ?, ?, ?)
+        """, (guild_id, category, channel_id, message_id))
+        await db.commit()
+        return True
+
+async def get_last_panel_message(guild_id: int, category: str) -> Optional[Dict[str, Any]]:
+    """Obtiene los datos del mensaje anterior de una categoría para eliminarlo."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM last_panel_messages WHERE guild_id = ? AND category = ?
+        """, (guild_id, category)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None

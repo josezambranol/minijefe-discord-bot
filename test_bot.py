@@ -11,17 +11,23 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-
-# Test Database and Date Parser
+# Test Database, Date Parser, Team Data & Embeds
 from database import (
     init_db, create_task, get_task, get_tasks, get_overdue_tasks,
     mark_task_completed, mark_task_overdue, postpone_task, delete_task,
     get_guild_settings, update_guild_setting, get_task_stats
 )
 from utils.date_parser import parse_task_date, format_time_left, format_date_display
+from utils.team_data import TEAM_MEMBERS, get_team_mentions, get_team_directory_info
+from utils.embeds import (
+    task_detail_embed, task_list_embed, stats_embed, welcome_introduction_embed,
+    team_directory_embed, day_schedule_embed, full_week_schedule_embed, today_live_class_embed
+)
 
 async def test_database_and_parser():
-    print("Testing date parser...")
+    print("==================================================")
+    print("1. Probando Date Parser en español y 12h...")
+    print("==================================================")
     tz = "America/Bogota"
     
     # Test 1: Date parser tests
@@ -52,7 +58,6 @@ async def test_database_and_parser():
     assert err6 is None
     print(f"  [OK] 'por definir' -> {d6} ({t6})")
 
-
     time_str, urgency, _ = format_time_left((datetime.now(pytz.timezone(tz)) + timedelta(days=2)).isoformat(), tz)
     print(f"  [OK] format_time_left (+2 days) -> {time_str} | Urgencia: {urgency}")
 
@@ -60,7 +65,26 @@ async def test_database_and_parser():
     print(f"  [OK] format_time_left (-1 day) -> {time_str_overdue} | Urgencia: {urgency_od}")
     assert urgency_od == "OVERDUE"
 
-    print("\nTesting Database CRUD operations...")
+    print("\n==================================================")
+    print("2. Probando Módulo del Equipo (5 Integrantes)...")
+    print("==================================================")
+    assert len(TEAM_MEMBERS) == 5, f"Debe haber exactamente 5 integrantes, encontrados: {len(TEAM_MEMBERS)}"
+    expected_members = ["jote", "jordy", "rafxzz", "ByLogan", "SEVINHO"]
+    for m in expected_members:
+        assert any(tm["id_alias"] == m or tm["name"] == m for tm in TEAM_MEMBERS), f"Miembro {m} no encontrado en TEAM_MEMBERS"
+        print(f"  [OK] Miembro verificado: {m}")
+
+    mentions = get_team_mentions(None)
+    assert "@everyone" not in mentions and "@here" not in mentions, "ERROR: Menciones contienen @everyone o @here"
+    print(f"  [OK] get_team_mentions sin servidor -> {mentions}")
+
+    dir_info = get_team_directory_info(None)
+    assert len(dir_info) == 5
+    print(f"  [OK] Directorio de equipo obtenido con 5 integrantes.")
+
+    print("\n==================================================")
+    print("3. Probando Base de Datos SQLite (CRUD & 1-Clic)...")
+    print("==================================================")
     await init_db()
 
     # Create task
@@ -70,19 +94,19 @@ async def test_database_and_parser():
         channel_id=987654321,
         creator_id=111,
         assigned_user_id=222,
-        title="Crear reporte de métricas",
-        description="Incluir gráficas de retención y DAU",
+        title="[Desarrollo de Software II] Entrega de Sprint 1",
+        description="Subir repositorio de GitHub y documentación",
         due_date_iso=future_date,
         reminder_time="09:30"
     )
-    print(f"  [OK] Created task with ID: {task_id}")
+    print(f"  [OK] Tarea creada con ID: {task_id}")
 
     # Read task
     task = await get_task(task_id)
     assert task is not None
-    assert task["title"] == "Crear reporte de métricas"
+    assert "[Desarrollo de Software II]" in task["title"]
     assert task["assigned_user_id"] == 222
-    print(f"  [OK] Fetched task #{task_id}: {task['title']}")
+    print(f"  [OK] Tarea obtenida #{task_id}: {task['title']}")
 
     # Guild settings
     settings = await get_guild_settings(123456789)
@@ -90,13 +114,19 @@ async def test_database_and_parser():
     await update_guild_setting(123456789, "reminder_channel_id", 555)
     updated_settings = await get_guild_settings(123456789)
     assert updated_settings["reminder_channel_id"] == 555
-    print(f"  [OK] Guild settings updated correctly: {updated_settings}")
+    print(f"  [OK] Configuración de servidor actualizada: {updated_settings['timezone']}")
 
-    # Mark completed
-    await mark_task_completed(task_id)
+    # Mark completed (1-click, sin notas)
+    await mark_task_completed(task_id, completed_by_id=333)
     task_done = await get_task(task_id)
     assert task_done["status"] == "completed"
-    print(f"  [OK] Marked task as completed.")
+    assert task_done["completed_by_id"] == 333
+    print(f"  [OK] Tarea completada con éxito en 1 solo paso.")
+
+    # Embeds check
+    embed_detail = task_detail_embed(task_done, tz)
+    assert embed_detail is not None
+    print(f"  [OK] Embed de detalle de tarea generado con éxito.")
 
     # Postpone
     new_due = (datetime.now(pytz.timezone(tz)) + timedelta(days=7)).isoformat()
@@ -104,25 +134,38 @@ async def test_database_and_parser():
     task_postponed = await get_task(task_id)
     assert task_postponed["status"] == "pending"
     assert task_postponed["due_date"] == new_due
-    print(f"  [OK] Postponed task and restored pending status.")
+    print(f"  [OK] Tarea pospuesta y restaurada a pending.")
 
     # Mark overdue
     await mark_task_overdue(task_id)
     overdue_list = await get_overdue_tasks(guild_id=123456789)
     assert any(t["id"] == task_id for t in overdue_list)
-    print(f"  [OK] Overdue tasks list contains task #{task_id}.")
+    print(f"  [OK] Lista de vencidas contiene tarea #{task_id}.")
 
     # Stats
     stats = await get_task_stats(123456789)
-    print(f"  [OK] Stats: {stats}")
+    print(f"  [OK] Estadísticas obtenidas: {stats}")
 
     # Delete
     await delete_task(task_id)
     task_deleted = await get_task(task_id)
     assert task_deleted is None
-    print(f"  [OK] Deleted task #{task_id} successfully.")
+    print(f"  [OK] Tarea eliminada #{task_id} exitosamente.")
 
-    print("\nAll database & parsing tests passed successfully! ✨\n")
+    print("\n==================================================")
+    print("4. Probando Generación de Embeds del Horario...")
+    print("==================================================")
+    emb_mon = day_schedule_embed("lunes", tz)
+    assert emb_mon is not None
+    emb_week = full_week_schedule_embed(tz)
+    assert emb_week is not None
+    emb_live = today_live_class_embed(tz)
+    assert emb_live is not None
+    emb_team = team_directory_embed(None)
+    assert emb_team is not None
+    print("  [OK] Todos los embeds de horario, semanal y equipo generados sin errores.")
+
+    print("\n✨ ¡TODAS LAS PRUEBAS TÉCNICAS Y LÓGICAS PASARON CON ÉXITO (100%)! ✨\n")
 
 if __name__ == "__main__":
     asyncio.run(test_database_and_parser())

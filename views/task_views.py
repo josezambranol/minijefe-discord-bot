@@ -2,7 +2,7 @@ import discord
 from typing import Optional
 from database import mark_task_completed, delete_task, postpone_task, get_task, get_guild_settings, get_tasks
 from utils.date_parser import parse_task_date
-from utils.embeds import task_detail_embed, task_list_embed, COLOR_SUCCESS, COLOR_DANGER
+from utils.embeds import task_detail_embed, task_list_embed
 
 class PostponeModal(discord.ui.Modal, title="⏰ Posponer Fecha Límite"):
     def __init__(self, task_id: int, guild_id: int):
@@ -27,77 +27,63 @@ class PostponeModal(discord.ui.Modal, title="⏰ Posponer Fecha Límite"):
         if success:
             updated_task = await get_task(self.task_id)
             embed = task_detail_embed(updated_task, tz_name)
+            view = TaskActionView(
+                task_id=self.task_id,
+                guild_id=self.guild_id,
+                assigned_user_id=updated_task["assigned_user_id"]
+            )
             await interaction.response.send_message(
-                f"✅ **Tarea #{self.task_id} pospuesta con éxito.** Nuevo plazo: `{display_text}`",
+                f"⏰ **Tarea #{self.task_id} pospuesta con éxito.** Nuevo plazo: `{display_text}`",
                 embed=embed,
+                view=view,
                 ephemeral=False
             )
         else:
             await interaction.response.send_message("❌ No se pudo actualizar la tarea.", ephemeral=True)
 
-class CompleteTaskModal(discord.ui.Modal, title="🎓 Marcar Tarea Finalizada / Calificada"):
-    def __init__(self, task_id: int, guild_id: int):
-        super().__init__()
-        self.task_id = task_id
-        self.guild_id = guild_id
-
-    grade_note = discord.ui.TextInput(
-        label="Nota, Calificación o Comentario (Opcional)",
-        placeholder="Ej: Nota: 5.0 | Entregado en Classroom | Aprobado",
-        required=False,
-        max_length=150
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
-        task = await get_task(self.task_id)
-        if not task:
-            await interaction.response.send_message("❌ Esta tarea ya no existe.", ephemeral=True)
-            return
-
-        note_val = self.grade_note.value.strip() if self.grade_note.value else None
-        await mark_task_completed(self.task_id, completed_by_id=interaction.user.id, grade_notes=note_val)
-
-        settings = await get_guild_settings(self.guild_id)
-        tz_name = settings.get("timezone", "America/Bogota")
-        
-        updated_task = await get_task(self.task_id)
-        embed = task_detail_embed(updated_task, tz_name)
-        
-        note_str = f" con nota/observación: *«{note_val}»*" if note_val else ""
-        await interaction.response.send_message(
-            content=f"🎉 **¡Tarea #{self.task_id} finalizada y calificada por {interaction.user.mention}!**{note_str}\n*(Los recordatorios automáticos han sido cancelados)*",
-            embed=embed,
-            ephemeral=False
-        )
-
 class TaskActionView(discord.ui.View):
-    """Botonera interactiva para acciones rápidas en una tarea."""
+    """Botonera interactiva para acciones rápidas en una tarea (1-clic)."""
     def __init__(self, task_id: int, guild_id: int, assigned_user_id: int, timeout: Optional[float] = None):
         super().__init__(timeout=timeout)
         self.task_id = task_id
         self.guild_id = guild_id
         self.assigned_user_id = assigned_user_id
 
-    @discord.ui.button(label="Completar / Calificar", style=discord.ButtonStyle.success, emoji="🎓", custom_id="btn_complete")
+    @discord.ui.button(label="Completar", style=discord.ButtonStyle.success, emoji="✅", custom_id="btn_complete")
     async def complete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Permite a CUALQUIER usuario marcarla como completada/calificada
+        """Marca la tarea como completada en 1 solo clic."""
         task = await get_task(self.task_id)
         if not task:
             await interaction.response.send_message("❌ Esta tarea ya no existe.", ephemeral=True)
             return
 
         if task["status"] == "completed":
-            await interaction.response.send_message("ℹ️ Esta tarea ya fue marcada como finalizada anteriormente.", ephemeral=True)
+            await interaction.response.send_message("ℹ️ Esta tarea ya se encuentra finalizada.", ephemeral=True)
             return
 
-        modal = CompleteTaskModal(self.task_id, self.guild_id)
-        await interaction.response.send_modal(modal)
+        # Marcar completada en BD
+        await mark_task_completed(self.task_id, completed_by_id=interaction.user.id)
+        settings = await get_guild_settings(self.guild_id)
+        tz_name = settings.get("timezone", "America/Bogota")
+        
+        updated_task = await get_task(self.task_id)
+        embed = task_detail_embed(updated_task, tz_name)
+
+        # Desactivar botón de completar
+        button.disabled = True
+        button.label = "Completada"
+
+        await interaction.response.send_message(
+            content=f"🎉 **¡Tarea #{self.task_id} marcada como completada por {interaction.user.mention}!** ✨\n*(Recordatorios automáticos desactivados)*",
+            embed=embed,
+            ephemeral=False
+        )
 
     @discord.ui.button(label="Posponer", style=discord.ButtonStyle.secondary, emoji="⏰", custom_id="btn_postpone")
     async def postpone_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(PostponeModal(self.task_id, self.guild_id))
 
-    @discord.ui.button(label="Ver Detalles", style=discord.ButtonStyle.primary, emoji="🔍", custom_id="btn_details")
+    @discord.ui.button(label="Detalles", style=discord.ButtonStyle.primary, emoji="🔍", custom_id="btn_details")
     async def details_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         task = await get_task(self.task_id)
         if not task:
@@ -113,7 +99,7 @@ class TaskActionView(discord.ui.View):
         is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
         task = await get_task(self.task_id)
         if not task:
-            await interaction.response.send_message("❌ Esta tarea no existe.", ephemeral=True)
+            await interaction.response.send_message("❌ Esta tarea ya no existe.", ephemeral=True)
             return
 
         # Permitir eliminar al asignado, creador o administrador
@@ -123,12 +109,6 @@ class TaskActionView(discord.ui.View):
 
         await delete_task(self.task_id)
         await interaction.response.send_message(f"🗑️ Tarea #{self.task_id} eliminada permanentemente.", ephemeral=True)
-        for child in self.children:
-            child.disabled = True
-        try:
-            await interaction.message.edit(view=self)
-        except Exception:
-            pass
 
 class TaskListView(discord.ui.View):
     """Vista con botones de filtro para navegar entre listas de tareas."""
@@ -158,5 +138,5 @@ class TaskListView(discord.ui.View):
         settings = await get_guild_settings(self.guild_id)
         tz_name = settings.get("timezone", "America/Bogota")
         tasks = await get_tasks(guild_id=self.guild_id, user_id=self.user_id, status="completed")
-        embed = task_list_embed(tasks, "✅ Tareas Completadas / Calificadas", "Historial de tareas finalizadas", tz_name)
+        embed = task_list_embed(tasks, "✅ Tareas Completadas", "Historial de tareas finalizadas", tz_name)
         await interaction.response.edit_message(embed=embed, view=self)

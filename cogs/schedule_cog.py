@@ -10,9 +10,9 @@ from utils.embeds import (
 )
 from utils.date_parser import get_now
 from utils.schedule_data import (
-    SCHEDULE_DATA, get_day_key_from_datetime, get_all_subjects_list
+    SCHEDULE_DATA, get_day_key_from_datetime, get_all_subjects_list, format_time_12h
 )
-
+from utils.auto_cleaner import send_clean_panel_interaction
 from views.schedule_views import ScheduleView
 
 class ScheduleCog(commands.Cog, name="Horario Académico"):
@@ -45,7 +45,7 @@ class ScheduleCog(commands.Cog, name="Horario Académico"):
             embed = day_schedule_embed(dia, tz_name)
 
         view = ScheduleView(guild_id=interaction.guild_id)
-        await interaction.response.send_message(embed=embed, view=view)
+        await send_clean_panel_interaction(interaction, "schedule_panel", embed, view=view)
 
     @app_commands.command(name="clase", description="Ver qué clase toca hoy en vivo, la que está en curso o la siguiente")
     @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
@@ -54,7 +54,7 @@ class ScheduleCog(commands.Cog, name="Horario Académico"):
         tz_name = settings.get("timezone", "America/Bogota")
         embed = today_live_class_embed(tz_name)
         view = ScheduleView(guild_id=interaction.guild_id)
-        await interaction.response.send_message(embed=embed, view=view)
+        await send_clean_panel_interaction(interaction, "live_class_panel", embed, view=view)
 
     @app_commands.command(name="hoy", description="Resumen completo del día (clases de hoy con salones y tareas pendientes)")
     @app_commands.checks.cooldown(1, 3.0, key=lambda i: (i.guild_id, i.user.id))
@@ -67,15 +67,13 @@ class ScheduleCog(commands.Cog, name="Horario Académico"):
         tasks = await get_tasks(guild_id=interaction.guild_id, status="pending")
         embed = today_briefing_embed(tasks, tz_name)
         view = ScheduleView(guild_id=interaction.guild_id)
-        await interaction.response.send_message(embed=embed, view=view)
-
+        await send_clean_panel_interaction(interaction, "today_briefing_panel", embed, view=view)
 
     @app_commands.command(name="materias", description="Directorio completo de asignaturas, códigos, salones y docentes")
-
     async def subjects_directory_cmd(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="📚 Directorio de Asignaturas & Docentes",
-            description="Información detallada del semestre en Cedesarrollo:\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            description="Información detallada del semestre en Cedesarrollo (Hora de Colombia):\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
             color=COLOR_INFO
         )
 
@@ -86,10 +84,12 @@ class ScheduleCog(commands.Cog, name="Horario Académico"):
                     continue
                 seen.add(cls["subject"])
                 
+                start_12 = format_time_12h(cls["start"])
+                end_12 = format_time_12h(cls["end"])
                 embed.add_field(
                     name=f"{cls['icon']} {cls['subject']}",
                     value=(
-                        f"• **Día y Hora:** `{day_data['name']}` ({cls['start']} - {cls['end']})\n"
+                        f"• **Día y Hora:** `{day_data['name']}` ({start_12} - {end_12})\n"
                         f"• **Docente:** `{cls['teacher']}`\n"
                         f"• **Salón:** `{cls['location']}`\n"
                         f"• **Código:** `{cls['code']}`"
@@ -97,8 +97,8 @@ class ScheduleCog(commands.Cog, name="Horario Académico"):
                     inline=False
                 )
 
-        embed.set_footer(text="MiniJefe • Horario de Ingeniería")
-        await interaction.response.send_message(embed=embed)
+        embed.set_footer(text="MiniJefe • Horario de Ingeniería • Hora Colombia (12h)")
+        await send_clean_panel_interaction(interaction, "subjects_directory_panel", embed)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ScheduleCog(bot))

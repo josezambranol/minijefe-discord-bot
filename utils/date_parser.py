@@ -136,7 +136,7 @@ def parse_task_date(date_str: str, tz_name: str = "America/Bogota") -> Tuple[dat
                 if p_time:
                     h, mi = p_time
 
-            target = target_day.replace(hour=h, minute=m, second=0, microsecond=0) if 'm' in locals() else target_day.replace(hour=h, minute=mi, second=0, microsecond=0)
+            target = target_day.replace(hour=h, minute=mi, second=0, microsecond=0)
             return target, None, f"{d_name.capitalize()} {target.strftime('%d/%m')} ({target.strftime('%I:%M %p').lstrip('0')})"
 
     # 6. Patrón relativo: 'en X dias / horas / minutos / semanas / meses'
