@@ -5,6 +5,7 @@ from typing import Optional, Literal
 import pytz
 from database import get_guild_settings, update_guild_setting
 from utils.embeds import COLOR_INFO, COLOR_SUCCESS, COLOR_WARNING
+from utils.reporting import log_to_reports, get_or_create_reports_channel
 
 class AdminCog(commands.Cog, name="Configuración del Servidor"):
     def __init__(self, bot: commands.Bot):
@@ -26,6 +27,37 @@ class AdminCog(commands.Cog, name="Configuración del Servidor"):
             color=COLOR_SUCCESS
         )
         await interaction.response.send_message(embed=embed)
+        try:
+            await log_to_reports(
+                guild=interaction.guild,
+                title="Canal de Recordatorios Actualizado",
+                description=f"Se configuró {canal.mention} como canal de recordatorios.",
+                action_type="config",
+                user=interaction.user
+            )
+        except Exception:
+            pass
+
+    @config_group.command(name="canal-reportes", description="Establecer el canal oficial donde MiniJefe registrará auditorías y reportes")
+    @app_commands.describe(canal="Canal de texto para auditorías y el informe diario")
+    async def set_reports_channel_cmd(self, interaction: discord.Interaction, canal: discord.TextChannel):
+        await update_guild_setting(interaction.guild_id, "reports_channel_id", canal.id)
+        embed = discord.Embed(
+            title="✅ Canal de Reportes Configurado",
+            description=f"A partir de ahora, todos los cambios, moderaciones e informes diarios se enviarán a {canal.mention}.",
+            color=COLOR_SUCCESS
+        )
+        await interaction.response.send_message(embed=embed)
+        try:
+            await log_to_reports(
+                guild=interaction.guild,
+                title="Canal de Reportes Asignado",
+                description=f"Se asignó {canal.mention} como canal oficial de reportes.",
+                action_type="config",
+                user=interaction.user
+            )
+        except Exception:
+            pass
 
     @config_group.command(name="zona-horaria", description="Configurar la zona horaria del servidor")
     @app_commands.describe(
@@ -82,6 +114,7 @@ class AdminCog(commands.Cog, name="Configuración del Servidor"):
         channel_mention = f"<#{settings['reminder_channel_id']}>" if settings.get("reminder_channel_id") else "*No configurado (canal por defecto)*"
         welcome_mention = f"<#{settings['welcome_channel_id']}>" if settings.get("welcome_channel_id") else "*Detección automática de canal de bienvenida*"
         daily_mention = f"<#{settings['daily_plan_channel_id']}>" if settings.get("daily_plan_channel_id") else "*Canal general por defecto*"
+        reports_mention = f"<#{settings['reports_channel_id']}>" if settings.get("reports_channel_id") else "*Detección automática (#reportes)*"
         dm_status = "✅ Activado" if settings.get("send_dm", 1) else "❌ Desactivado"
         spam_status = "🛡️ Activado" if settings.get("spam_shield_enabled", 1) else "❌ Desactivado"
         ai_personality = settings.get("ai_personality", "amigable").capitalize()
@@ -93,11 +126,12 @@ class AdminCog(commands.Cog, name="Configuración del Servidor"):
         embed.add_field(name="👋 Canal de Bienvenidas", value=welcome_mention, inline=True)
         embed.add_field(name="📅 Canal de Planes Diarios", value=daily_mention, inline=True)
         embed.add_field(name="📢 Canal de Recordatorios", value=channel_mention, inline=True)
+        embed.add_field(name="📋 Canal de Reportes", value=reports_mention, inline=True)
         embed.add_field(name="🛡️ Escudo Anti-Spam", value=spam_status, inline=True)
         embed.add_field(name="🎭 Personalidad de IA", value=f"`{ai_personality}`", inline=True)
         embed.add_field(name="🌍 Zona Horaria", value=f"`{settings.get('timezone', 'America/Bogota')}`", inline=True)
         embed.add_field(name="📬 Recordatorios por DM", value=dm_status, inline=True)
-        embed.set_footer(text="Comandos disponibles: /config-bienvenida, /config-antispam, /personalidad, /config-plan-diario")
+        embed.set_footer(text="Comandos disponibles: /config-bienvenida, /config-canal-reportes, /config-antispam, /reporte-diario")
 
         await interaction.response.send_message(embed=embed)
 

@@ -85,7 +85,8 @@ class TaskBot(commands.Bot):
             "cogs.community_cog",
             "cogs.moderation_cog",
             "cogs.daily_plans_cog",
-            "cogs.admin_cog"
+            "cogs.admin_cog",
+            "cogs.reports_cog"
         ]
 
         for ext in extensions:

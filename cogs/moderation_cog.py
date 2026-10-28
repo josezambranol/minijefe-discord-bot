@@ -10,6 +10,7 @@ from typing import Dict, Deque, Optional
 
 from database import get_guild_settings, update_guild_setting
 from utils.embeds import COLOR_WARNING, COLOR_SUCCESS, COLOR_DANGER, COLOR_INFO
+from utils.reporting import log_to_reports
 
 logger = logging.getLogger("MiniJefe.Moderation")
 
@@ -123,6 +124,25 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
 
                     confirm = await message.channel.send(f"🧹 Se han eliminado {' '.join(desc_parts)} correctamente.")
                     await confirm.delete(delay=5)
+
+                    # Registrar en #reportes
+                    try:
+                        filter_summary = f"Usuario: {target_user.mention if target_user else 'Todos'} | Días: {dias or '14 bulk'} | Spam: {solo_spam}"
+                        await log_to_reports(
+                            guild=message.guild,
+                            title="Limpieza de Chat por Comando",
+                            description=f"Se han eliminado **{len(deleted)} mensajes** en {target_channel.mention}.",
+                            action_type="moderacion",
+                            user=message.author,
+                            fields=[
+                                ("Canal afectado", target_channel.mention, True),
+                                ("Mensajes eliminados", str(len(deleted)), True),
+                                ("Filtros aplicados", filter_summary, False)
+                            ]
+                        )
+                    except Exception as e:
+                        logger.warning(f"Error registrando limpieza en #reportes: {e}")
+
                     return
                 except Exception as e:
                     logger.warning(f"Error al purgar mensajes por chat: {e}")
@@ -250,6 +270,21 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
             embed.set_footer(text=f"Servidor: {message.guild.name}")
             await mod_channel.send(embed=embed)
 
+        try:
+            await log_to_reports(
+                guild=message.guild,
+                title="Alerta de Seguridad: Reincidencia de Spam",
+                description=f"El usuario {message.author.mention} acumuló **{count} advertencias de spam** en {message.channel.mention}.",
+                action_type="moderacion",
+                user=message.author,
+                fields=[
+                    ("Canal", message.channel.mention, True),
+                    ("Advertencias acumuladas", str(count), True)
+                ]
+            )
+        except Exception as e:
+            logger.warning(f"Error al enviar log de spam a #reportes: {e}")
+
     @app_commands.command(name="config-antispam", description="Activa o desactiva la protección automática contra spam")
     @app_commands.describe(activar="True para activar la protección, False para desactivarla")
     @app_commands.default_permissions(administrator=True)
@@ -370,6 +405,24 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
             )
             embed.set_footer(text=f"Servidor: {interaction.guild.name} • Moderación")
             await interaction.followup.send(embed=embed, ephemeral=True)
+
+            # Registrar en #reportes
+            try:
+                filter_str = f"Usuario: {usuario.mention if usuario else 'Todos'} | Días: {dias or '14 bulk'} | Spam: {solo_spam} | Bots: {solo_bots}"
+                await log_to_reports(
+                    guild=interaction.guild,
+                    title="Purga de Mensajes Ejecutada (/limpiar)",
+                    description=f"Se han eliminado **{len(deleted)} mensajes** en {target_channel.mention}.",
+                    action_type="moderacion",
+                    user=interaction.user,
+                    fields=[
+                        ("Canal", target_channel.mention, True),
+                        ("Cantidad eliminada", str(len(deleted)), True),
+                        ("Filtros", filter_str, False)
+                    ]
+                )
+            except Exception as e:
+                logger.warning(f"Error al reportar /limpiar en #reportes: {e}")
         except Exception as e:
             logger.error(f"Error ejecutando /limpiar: {e}", exc_info=True)
             await interaction.followup.send(f"❌ Ocurrió un error al eliminar los mensajes: {e}", ephemeral=True)

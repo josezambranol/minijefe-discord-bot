@@ -91,6 +91,19 @@ async def init_db():
                 completed_at TEXT
             )
         """)
+
+        # Tabla para auditoría y reportes de actividades de MiniJefe
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS bot_activity_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                action_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                user_id INTEGER,
+                created_at TEXT NOT NULL
+            )
+        """)
         
         # Índices para consultas rápidas
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_guild_status ON tasks(guild_id, status)")
@@ -98,6 +111,7 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_daily_plans ON daily_plans(guild_id, plan_date)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_periodic_reminders ON periodic_reminders(guild_id, status)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_activity_logs_guild_time ON bot_activity_logs(guild_id, created_at)")
         
         # Migraciones automáticas de columnas
         migrations = [
@@ -110,7 +124,9 @@ async def init_db():
             "ALTER TABLE guild_settings ADD COLUMN daily_plan_channel_id INTEGER",
             "ALTER TABLE guild_settings ADD COLUMN daily_plan_hour INTEGER DEFAULT 8",
             "ALTER TABLE guild_settings ADD COLUMN ai_chat_enabled INTEGER DEFAULT 1",
-            "ALTER TABLE guild_settings ADD COLUMN ai_personality TEXT DEFAULT 'amigable'"
+            "ALTER TABLE guild_settings ADD COLUMN ai_personality TEXT DEFAULT 'amigable'",
+            "ALTER TABLE guild_settings ADD COLUMN reports_channel_id INTEGER",
+            "ALTER TABLE guild_settings ADD COLUMN daily_report_hour INTEGER DEFAULT 9"
         ]
         for mig in migrations:
             try:
@@ -487,5 +503,54 @@ async def cancel_periodic_reminder(reminder_id: int) -> bool:
         """, (now_iso, reminder_id))
         await db.commit()
         return cursor.rowcount > 0
+
+
+# ===================================================================
+# AUDITORÍA Y REGISTRO DE ACTIVIDADES DE MINIJEFE (#reportes)
+# ===================================================================
+
+async def log_bot_activity(
+    guild_id: int,
+    action_type: str,
+    title: str,
+    description: str,
+    user_id: Optional[int] = None
+) -> int:
+    """Registra una acción, cambio o actividad de MiniJefe en la base de datos para auditoría y reportes diarios."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO bot_activity_logs (guild_id, action_type, title, description, user_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (guild_id, action_type, title, description, user_id, now_iso))
+        await db.commit()
+        return cursor.lastrowid
+
+async def get_activities_since(guild_id: int, since_iso: str) -> List[Dict[str, Any]]:
+    """Obtiene las actividades registradas desde una fecha ISO específica."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM bot_activity_logs
+            WHERE guild_id = ? AND created_at >= ?
+            ORDER BY id DESC
+        """, (guild_id, since_iso)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def get_activity_stats_since(guild_id: int, since_iso: str) -> Dict[str, int]:
+    """Obtiene estadísticas de conteo agrupadas por tipo de acción desde una fecha ISO."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("""
+            SELECT action_type, COUNT(*) as cnt
+            FROM bot_activity_logs
+            WHERE guild_id = ? AND created_at >= ?
+            GROUP BY action_type
+        """, (guild_id, since_iso)) as cursor:
+            rows = await cursor.fetchall()
+            stats = {}
+            for row in rows:
+                stats[row[0]] = row[1]
+            return stats
 
 

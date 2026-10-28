@@ -281,3 +281,35 @@ async def generate_daily_briefing(day_name: str, activities: List[str], goals: O
     except Exception as e:
         logger.error(f"Error generando plan diario con IA: {e}")
     return fallback
+
+async def generate_daily_system_report(
+    guild_name: str,
+    stats: Dict[str, Any],
+    recent_activities: List[str]
+) -> str:
+    """Genera una síntesis ejecutiva profesional del día sobre las actividades y operaciones autónomas de MiniJefe."""
+    activities_text = "\n".join([f"- {a}" for a in recent_activities[:10]]) if recent_activities else "Operaciones nominales sin incidencias."
+    prompt = (
+        f"Eres MiniJefe, el asistente técnico oficial del servidor '{guild_name}'. "
+        f"Vas a redactar el balance ejecutivo diario para el canal oficial de #reportes. "
+        f"Datos operacionales de las últimas 24 horas:\n"
+        f"• Recordatorios autónomos ejecutados: {stats.get('reminders_sent', 0)}\n"
+        f"• Tareas activas en seguimiento: {stats.get('active_reminders', 0)}\n"
+        f"• Acciones de moderación / purga: {stats.get('moderation_actions', 0)}\n"
+        f"• Nuevos miembros recibidos: {stats.get('welcomes_count', 0)}\n"
+        f"• Tareas/consultas registradas: {stats.get('tasks_created', 0)}\n\n"
+        f"Actividades destacadas:\n{activities_text}\n\n"
+        f"Redacta un informe ejecutivo conciso (máximo 80 palabras), formal y constructivo, destacando la estabilidad del servidor, el soporte continuo y la colaboración en equipo. No uses comillas."
+    )
+    fallback = (
+        f"📊 **Balance Operativo del Servidor — {guild_name}:** Durante la jornada se mantuvieron activas las automatizaciones de recordatorios y soporte de comunidad. "
+        f"Los servicios de moderación, bienvenida e inteligencia artificial operan de manera nominal para mantener el espacio ordenado y productivo."
+    )
+    try:
+        quote = await ask_gemini(prompt, personality="profesional", guild_name=guild_name)
+        if quote and "⚠️" not in quote and "⚡" not in quote:
+            return quote
+    except Exception as e:
+        logger.error(f"Error generando reporte diario con IA: {e}")
+    return fallback
+

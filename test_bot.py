@@ -17,8 +17,12 @@ from database import (
     get_guild_settings,
     update_guild_setting,
     add_daily_plan,
-    get_daily_plans_for_date
+    get_daily_plans_for_date,
+    log_bot_activity,
+    get_activities_since,
+    get_activity_stats_since
 )
+from utils.reporting import ACTION_STYLES
 from utils.image_generator import generate_welcome_card
 from utils.embeds import (
     create_server_rules_embeds,
@@ -35,12 +39,12 @@ async def run_tests():
     print("=" * 60)
 
     # 1. Base de datos SQLite
-    print("\n[1/5] Inicializando y verificando base de datos...")
+    print("\n[1/5] Inicializando y verificando base de datos y auditoría...")
     await init_db()
     rem_id = await add_periodic_reminder(
         guild_id=123456789,
         channel_id=987654321,
-        creator_id=710931815271235645,  # Jordy
+        creator_id=710931815271235645,
         assigned_user_id=111222333,
         title="Test: Revisar endpoints de la API",
         interval_minutes=60,
@@ -50,7 +54,21 @@ async def run_tests():
     active = await get_active_periodic_reminders(123456789)
     assert any(r["id"] == rem_id for r in active), "No se encontró el recordatorio activo"
     await complete_periodic_reminder(rem_id)
-    print("  ✅ Base de datos SQLite y Recordatorios Periódicos: OK")
+
+    # Probar registro de actividad (#reportes)
+    log_id = await log_bot_activity(
+        guild_id=123456789,
+        action_type="setup",
+        title="Test de Auditoría",
+        description="Verificación del sistema de reportes",
+        user_id=710931815271235645
+    )
+    assert log_id > 0, "Fallo al registrar actividad en bot_activity_logs"
+    recent = await get_activities_since(123456789, "2000-01-01T00:00:00")
+    assert any(a["id"] == log_id for a in recent), "No se encontró la actividad en get_activities_since"
+    stats = await get_activity_stats_since(123456789, "2000-01-01T00:00:00")
+    assert stats.get("setup", 0) > 0, "Fallo en conteo de estadísticas por acción"
+    print("  ✅ Base de datos SQLite, Auditoría y Recordatorios Periódicos: OK")
 
     # 2. Generador gráfico de tarjetas de bienvenida (Pillow)
     print("\n[2/5] Probando generador de tarjetas de bienvenida...")
@@ -94,7 +112,8 @@ async def run_tests():
     import cogs.moderation_cog
     import cogs.daily_plans_cog
     import cogs.admin_cog
-    print("  ✅ Todos los 8 cogs se importan limpiamente sin errores de sintaxis: OK")
+    import cogs.reports_cog
+    print("  ✅ Todos los 9 cogs se importan limpiamente sin errores de sintaxis: OK")
 
     print("\n" + "=" * 60)
     print("🎉 ¡TODAS LAS PRUEBAS PASARON EXITOSAMENTE! MINIJEFE ESTÁ 100% PULIDO")

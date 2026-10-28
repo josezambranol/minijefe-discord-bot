@@ -10,6 +10,7 @@ from database import get_guild_settings, update_guild_setting
 from utils.ai_service import generate_welcome_quote
 from utils.image_generator import generate_welcome_card
 from utils.embeds import COLOR_SUCCESS, COLOR_PRIMARY
+from utils.reporting import log_to_reports
 
 logger = logging.getLogger("MiniJefe.Welcome")
 
@@ -139,6 +140,23 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
             except Exception as e2:
                 logger.error(f"Error al enviar mensaje de bienvenida en fallback: {e2}")
 
+        # Registrar el evento en #reportes
+        try:
+            await log_to_reports(
+                guild=member.guild,
+                title="Nuevo Miembro Recibido",
+                description=f"Se ha procesado y enviado la bienvenida a {member.mention} en {channel.mention}.",
+                action_type="bienvenida",
+                user=member,
+                fields=[
+                    ("Miembro", f"{member.display_name} (`{member.id}`)", True),
+                    ("Contador de Comunidad", f"#{member.guild.member_count}", True),
+                    ("Canal asignado", channel.mention, True)
+                ]
+            )
+        except Exception as e:
+            logger.warning(f"Error registrando bienvenida en #reportes: {e}")
+
     @app_commands.command(name="config-bienvenida", description="Configura el canal oficial de bienvenidas del servidor")
     @app_commands.describe(canal="Canal donde MiniJefe saludará a los nuevos miembros")
     @app_commands.default_permissions(administrator=True)
@@ -151,6 +169,16 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
             color=COLOR_SUCCESS
         )
         await interaction.response.send_message(embed=embed)
+        try:
+            await log_to_reports(
+                guild=interaction.guild,
+                title="Canal de Bienvenidas Configurado",
+                description=f"Se asignó {canal.mention} como canal oficial de bienvenidas.",
+                action_type="config",
+                user=interaction.user
+            )
+        except Exception as e:
+            pass
 
     @app_commands.command(name="probar-bienvenida", description="Simula un mensaje de bienvenida con tarjeta gráfica para previsualizarlo")
     @app_commands.default_permissions(administrator=True)

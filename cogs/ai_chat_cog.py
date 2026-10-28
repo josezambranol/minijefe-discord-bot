@@ -11,6 +11,7 @@ from typing import Dict, Deque, Optional
 from database import get_guild_settings, update_guild_setting, add_periodic_reminder
 from utils.ai_service import ask_gemini_smart, ask_gemini
 from utils.embeds import COLOR_INFO, COLOR_SUCCESS, COLOR_WARNING
+from utils.reporting import log_to_reports
 from cogs.periodic_reminders_cog import PeriodicReminderActionView, format_interval
 
 logger = logging.getLogger("MiniJefe.AIChat")
@@ -82,6 +83,24 @@ class AIChatCog(commands.Cog, name="IA y Gestión Inteligente"):
 
             await message.reply(embed=embed, view=view, mention_author=False)
             logger.info(f"Tarea #{rem_id} registrada vía IA para {target_user.display_name} en {message.guild.name}")
+
+            # Registrar en #reportes
+            try:
+                await log_to_reports(
+                    guild=message.guild,
+                    title="Tarea Registrada vía Asistente IA",
+                    description=f"Se registró la tarea **#{rem_id}** solicitada por {message.author.mention}.",
+                    action_type="recordatorio",
+                    user=message.author,
+                    fields=[
+                        ("Descripción", clean_title, False),
+                        ("Asignada a", target_user.mention, True),
+                        ("Frecuencia", interval_display, True)
+                    ]
+                )
+            except Exception as e:
+                logger.warning(f"Error al reportar tarea de IA en #reportes: {e}")
+
             return True
         except Exception as e:
             logger.error(f"Error registrando tarea vía IA: {e}", exc_info=True)

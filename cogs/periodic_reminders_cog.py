@@ -12,9 +12,11 @@ from database import (
     get_periodic_reminder,
     update_periodic_reminder_sent,
     complete_periodic_reminder,
-    cancel_periodic_reminder
+    cancel_periodic_reminder,
+    log_bot_activity
 )
 from utils.embeds import COLOR_WARNING, COLOR_SUCCESS, COLOR_DANGER, COLOR_INFO
+from utils.reporting import log_to_reports
 
 logger = logging.getLogger("MiniJefe.PeriodicReminders")
 
@@ -75,6 +77,19 @@ class PeriodicReminderActionView(discord.ui.View):
             embed.set_footer(text=f"Servidor: {interaction.guild.name if interaction.guild else 'Comunidad'}")
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(embed=embed)
+
+            # Registrar en #reportes
+            if interaction.guild:
+                try:
+                    await log_to_reports(
+                        guild=interaction.guild,
+                        title="Tarea Completada",
+                        description=f"La tarea **#{self.reminder_id}** fue completada satisfactoriamente.",
+                        action_type="recordatorio",
+                        user=user
+                    )
+                except Exception as e:
+                    logger.warning(f"Error al reportar tarea completada: {e}")
         else:
             await interaction.response.send_message("⚠️ Esta tarea ya no se encuentra activa o ya fue completada.", ephemeral=True)
 
@@ -105,6 +120,19 @@ class PeriodicReminderActionView(discord.ui.View):
             embed.set_footer(text=f"Servidor: {interaction.guild.name if interaction.guild else 'Comunidad'}")
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(embed=embed)
+
+            # Registrar en #reportes
+            if interaction.guild:
+                try:
+                    await log_to_reports(
+                        guild=interaction.guild,
+                        title="Recordatorio Cancelado",
+                        description=f"El recordatorio **#{self.reminder_id}** fue cancelado.",
+                        action_type="recordatorio",
+                        user=user
+                    )
+                except Exception as e:
+                    logger.warning(f"Error al reportar cancelación en #reportes: {e}")
         else:
             await interaction.response.send_message("⚠️ Este recordatorio ya no está activo.", ephemeral=True)
 
@@ -232,6 +260,16 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
             now_iso = datetime.now(timezone.utc).isoformat()
             await update_periodic_reminder_sent(rem_id, now_iso)
             logger.info(f"Recordatorio #{rem_id} enviado a {assigned_user.display_name} cada {interval_text}")
+            try:
+                await log_bot_activity(
+                    guild_id=guild.id,
+                    action_type="autonomous_reminder",
+                    title=f"Recordatorio #{rem_id} Despachado",
+                    description=f"Recordatorio periódico enviado a {assigned_user.display_name} para la tarea '{rem['title']}'",
+                    user_id=None
+                )
+            except Exception:
+                pass
 
     @app_commands.command(name="recordar", description="Asigna una tarea o recordatorio periódico con intervalo flexible")
     @app_commands.describe(
@@ -282,6 +320,23 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
         embed.set_footer(text=f"ID de Tarea: #{rem_id} • Servidor: {interaction.guild.name}")
         view = PeriodicReminderActionView(reminder_id=rem_id, assigned_user_id=usuario.id, creator_id=interaction.user.id)
         await interaction.response.send_message(embed=embed, view=view)
+
+        # Registrar en #reportes
+        try:
+            await log_to_reports(
+                guild=interaction.guild,
+                title="Nueva Tarea Agendada",
+                description=f"Se registró la tarea **#{rem_id}** para {usuario.mention}.",
+                action_type="recordatorio",
+                user=interaction.user,
+                fields=[
+                    ("Descripción", tarea.strip(), False),
+                    ("Asignada a", usuario.mention, True),
+                    ("Frecuencia", interval_display, True)
+                ]
+            )
+        except Exception as e:
+            logger.warning(f"Error al reportar tarea agendada en #reportes: {e}")
 
     @app_commands.command(name="recordatorios-activos", description="Muestra todas las tareas periódicas activas en el servidor")
     async def slash_list_reminders(self, interaction: discord.Interaction):

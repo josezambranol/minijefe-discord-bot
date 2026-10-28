@@ -5,6 +5,7 @@ import logging
 from typing import List, Optional
 
 from utils.embeds import create_roles_panel_embed, COLOR_SUCCESS, COLOR_WARNING, COLOR_PRIMARY
+from utils.reporting import log_to_reports
 
 logger = logging.getLogger("MiniJefe.Roles")
 
@@ -97,7 +98,7 @@ async def apply_role_changes(
     except discord.Forbidden:
         await interaction.followup.send(
             "🚫 **Permiso denegado por Discord:** El rol de **MiniJefe** debe estar ubicado en la lista de roles "
-            "**por encima** de los roles que intenta asignar. Pídele al Jefe Jordy o a un Administrador que suba la posición del bot.",
+            "**por encima** de los roles que intenta asignar. Por favor verifica la jerarquía de roles en los Ajustes del Servidor.",
             ephemeral=True
         )
         return
@@ -124,6 +125,22 @@ async def apply_role_changes(
         f"{missing_warn}",
         ephemeral=True
     )
+
+    # Registrar en #reportes
+    try:
+        await log_to_reports(
+            guild=guild,
+            title="Actualización de Roles de Usuario",
+            description=f"El miembro {member.mention} actualizó sus roles desde el panel interactivo.",
+            action_type="roles",
+            user=member,
+            fields=[
+                ("Roles añadidos (+)", added_text, True),
+                ("Roles removidos (-)", removed_text, True)
+            ]
+        )
+    except Exception as e:
+        logger.warning(f"Error al registrar cambio de roles en #reportes: {e}")
 
 
 class SpecialtySelect(discord.ui.Select):
@@ -319,6 +336,21 @@ class RolesCog(commands.Cog, name="Roles"):
             f"💡 *Recuerda asegurarte de que el rol de MiniJefe esté por encima de estos roles en los Ajustes del Servidor.*",
             ephemeral=True
         )
+
+        try:
+            await log_to_reports(
+                guild=guild,
+                title="Creación y Verificación de Roles Dev",
+                description=f"Se crearon **{len(created)} roles** nuevos en el servidor.",
+                action_type="roles",
+                user=interaction.user,
+                fields=[
+                    ("Roles creados", created_str, False),
+                    ("Roles existentes", str(len(already_present)), True)
+                ]
+            )
+        except Exception as e:
+            logger.warning(f"Error al reportar creación de roles en #reportes: {e}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(RolesCog(bot))
