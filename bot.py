@@ -17,8 +17,18 @@ from discord.ext import commands
 
 from database import init_db
 
-# Cargar variables de entorno
-load_dotenv()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Cargar variables de entorno (locales y Secret Files de Render)
+local_env = os.path.join(BASE_DIR, ".env")
+if os.path.exists(local_env):
+    load_dotenv(local_env)
+else:
+    load_dotenv()
+
+if os.path.exists("/etc/secrets/.env"):
+    load_dotenv("/etc/secrets/.env")
+
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Configuración de logs
@@ -75,9 +85,13 @@ class TaskBot(commands.Bot):
             logger.error(f"Error al sincronizar comandos: {e}")
 
     async def on_ready(self):
+        from utils.ai_service import get_gemini_api_key
+        has_gemini = "CONECTADA ✅" if get_gemini_api_key() else "NO DETECTADA ❌ (Configura GEMINI_API_KEY en Render)"
+
         logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         logger.info(f"🤖 Bot conectado como: {self.user.name} ({self.user.id})")
         logger.info(f"🌐 Servidores conectados: {len(self.guilds)}")
+        logger.info(f"🔑 Gemini IA Status: {has_gemini}")
         logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         activity = discord.Activity(

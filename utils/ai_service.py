@@ -15,7 +15,42 @@ load_dotenv()
 
 logger = logging.getLogger("MiniJefe.AI")
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def get_gemini_api_key() -> Optional[str]:
+    """Resuelve la API Key de Gemini desde variables de entorno locales, Render Secret Files o Environment Variables."""
+    # 1. Cargar .env desde la raíz del proyecto
+    local_env = os.path.join(BASE_DIR, ".env")
+    if os.path.exists(local_env):
+        load_dotenv(local_env)
+    else:
+        load_dotenv()
+    
+    # 2. Cargar Secret Files en Render.com (/etc/secrets/.env)
+    if os.path.exists("/etc/secrets/.env"):
+        load_dotenv("/etc/secrets/.env")
+
+    # 3. Si en Render se subió como Secret File suelto (/etc/secrets/GEMINI_API_KEY)
+    if os.path.isdir("/etc/secrets"):
+        for fname in os.listdir("/etc/secrets"):
+            if "GEMINI" in fname.upper() or "KEY" in fname.upper():
+                try:
+                    with open(os.path.join("/etc/secrets", fname), "r", encoding="utf-8") as f:
+                        val = f.read().strip()
+                        if val and len(val) > 20 and not val.startswith("#"):
+                            return val
+                except Exception:
+                    pass
+
+    # 4. Buscar en variables de entorno del sistema
+    for var in ["GEMINI_API_KEY", "GEMINI_KEY", "GOOGLE_API_KEY", "gemini_api_key", "Gemini_Api_Key"]:
+        val = os.getenv(var)
+        if val and val != "TU_API_KEY_DE_GEMINI_AQUI":
+            return val.strip()
+
+    return None
+
+GEMINI_API_KEY = get_gemini_api_key()
 
 # Modelos en orden de preferencia y resiliencia
 MODELS_PRIORITY = [
@@ -54,9 +89,9 @@ async def ask_gemini(
     custom_system_prompt: Optional[str] = None
 ) -> str:
     """Envía un prompt a Gemini API con reintentos automáticos y devuelve la respuesta en texto."""
-    api_key = os.getenv("GEMINI_API_KEY", GEMINI_API_KEY)
-    if not api_key or api_key == "TU_API_KEY_DE_GEMINI_AQUI":
-        return "⚠️ *[MiniJefe]* Mi conexión con la IA de Gemini aún no tiene una API Key configurada en el archivo `.env`."
+    api_key = get_gemini_api_key()
+    if not api_key:
+        return "⚠️ *[MiniJefe]* No detecto la clave de Gemini. Configura la variable de entorno `GEMINI_API_KEY` en Render.com."
 
     system_text = custom_system_prompt or DEFAULT_SYSTEM_PROMPTS.get(personality, DEFAULT_SYSTEM_PROMPTS["amigable"])
 
