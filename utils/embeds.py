@@ -28,140 +28,24 @@ def get_discord_timestamp_str(date_iso: str, tz_name: str = "America/Bogota") ->
         return ""
 
 def create_server_rules_embeds() -> List[discord.Embed]:
-    """Crea el reglamento oficial extenso, formal y libre de ruido visual para la comunidad de programación."""
-    embed1 = discord.Embed(
-        title="REGLAMENTO OFICIAL DE LA COMUNIDAD",
+    """Crea el reglamento oficial en un solo bloque conciso, con reglas de una sola línea fáciles de leer."""
+    embed = discord.Embed(
+        title="REGLAS DEL SERVIDOR",
         description=(
-            "Este servidor es una comunidad técnica enfocada en un 95% al desarrollo de software, ingeniería de sistemas, "
-            "arquitectura, aprendizaje continuo y construcción de proyectos colaborativos, con un espacio secundario y "
-            "delimitado para la recreación.\n\n"
-            "La permanencia y participación en el servidor implican la aceptación y el cumplimiento estricto de las "
-            "siguientes disposiciones."
+            "Comunidad enfocada en desarrollo de software, aprendizaje y creación de proyectos.\n\n"
+            "**1. Respeto profesional:** Trato cordial con todos sin importar su nivel de experiencia; cero insultos, acoso o toxicidad.\n\n"
+            "**2. Consultas directas:** Explica tu problema de código directamente usando bloques de texto o repositorios, sin subir fotos borrosas de celular.\n\n"
+            "**3. Cero credenciales:** Nunca publiques claves de API, archivos `.env`, tokens ni contraseñas en ningún canal.\n\n"
+            "**4. Orden de canales:** Publica cada tema en su canal correspondiente y mantén la prioridad en programación.\n\n"
+            "**5. Proyectos:** Toda búsqueda de equipo o propuesta debe publicarse en el canal de proyectos indicando tecnologías y objetivo.\n\n"
+            "**6. Cero spam:** Prohibido el spam, la autopromoción no autorizada y enviar mensajes privados (DM) con fines comerciales.\n\n"
+            "**7. Ética y legalidad:** Prohibido compartir malware, piratería, exploits o contenido ilegal.\n\n"
+            "**8. Sanciones:** El incumplimiento de estas reglas conlleva advertencia, silencio temporal o expulsión del servidor."
         ),
         color=COLOR_DARK
     )
-
-    embed1.add_field(
-        name="1. Convivencia Profesional y Respeto Mutuo",
-        value=(
-            "Se exige un trato cordial, respetuoso y constructivo entre todos los integrantes, sin importar su nivel "
-            "de experiencia (estudiante, autodidacta, junior o senior). Queda estrictamente prohibido el acoso, las "
-            "descalificaciones personales, las burlas hacia consultas básicas, la discriminación o cualquier conducta "
-            "que genere un ambiente hostil. Los debates sobre lenguajes, frameworks o herramientas deben basarse "
-            "exclusivamente en argumentos técnicos y objetivos."
-        ),
-        inline=False
-    )
-
-    embed1.add_field(
-        name="2. Estándares para Consultas Técnicas y Depuración",
-        value=(
-            "Para mantener la calidad técnica de los canales de ayuda, evita publicar mensajes sin contenido como "
-            "'¿alguien sabe Java?' o '¿quién me ayuda con un error?'. Redacta tu consulta directamente incluyendo:\n"
-            "- El contexto de lo que estás desarrollando.\n"
-            "- Qué solución intentaste aplicar y qué resultado esperabas obtener.\n"
-            "- El mensaje de error completo (stack trace) y el fragmento de código relevante.\n"
-            "El código debe compartirse utilizando bloques de formato Markdown o enlaces a repositorios (GitHub, GitLab, Pastebin). "
-            "No se permite subir fotografías de pantallas tomadas con teléfono móvil."
-        ),
-        inline=False
-    )
-
-    embed1.add_field(
-        name="3. Orden Temático y Uso Correcto de Canales",
-        value=(
-            "Cada canal cuenta con un propósito definido. Las consultas de programación, revisiones de arquitectura, "
-            "publicación de proyectos y recursos de estudio deben realizarse en su canal correspondiente. El contenido "
-            "recreativo o de videojuegos debe mantenerse exclusivamente en el área asignada para ello, evitando desviar "
-            "las conversaciones técnicas en los canales de desarrollo."
-        ),
-        inline=False
-    )
-
-    embed1.add_field(
-        name="4. Integridad Académica y Aprendizaje Activo",
-        value=(
-            "Los canales de asistencia técnica existen para orientar, explicar conceptos y apoyar en la resolución de "
-            "bloqueos, no para resolver tareas universitarias, exámenes o pruebas técnicas laborales completas por encargo. "
-            "Quien solicita ayuda debe demostrar interés en comprender la solución y presentar su avance previo."
-        ),
-        inline=False
-    )
-
-    embed1.add_field(
-        name="5. Seguridad de la Información y Manejo de Credenciales",
-        value=(
-            "Por seguridad propia y de la comunidad, nunca publiques archivos de configuración (.env), claves de API, "
-            "tokens de autenticación, contraseñas, direcciones IP privadas ni credenciales de bases de datos. Antes de "
-            "compartir un fragmento de código o repositorio, verifica que toda información sensible haya sido reemplazada "
-            "por variables de entorno de ejemplo."
-        ),
-        inline=False
-    )
-
-    embed2 = discord.Embed(
-        title="NORMATIVA DE PROYECTOS, SEGURIDAD Y MODERACIÓN",
-        color=COLOR_DARK
-    )
-
-    embed2.add_field(
-        name="6. Ética Profesional y Legalidad",
-        value=(
-            "Queda terminantemente prohibido solicitar, desarrollar, compartir o promover software malicioso (malware), "
-            "scripts de intrusión o explotación no autorizada, ataques de denegación de servicio, phishing, evasión de "
-            "controles de seguridad, distribución de material sujeto a derechos de autor sin licencia o cualquier "
-            "actividad que infrinja la ley o los términos de servicio de Discord."
-        ),
-        inline=False
-    )
-
-    embed2.add_field(
-        name="7. Colaboración en Proyectos y Transparencia",
-        value=(
-            "Las convocatorias para iniciar o integrarse a proyectos de desarrollo deben publicarse en el canal de "
-            "proyectos utilizando el formato estándar del servidor. Es obligatorio especificar con claridad el alcance "
-            "del proyecto, el stack tecnológico, los perfiles requeridos y la naturaleza de la iniciativa (proyecto de "
-            "estudio, código abierto, portafolio o comercial)."
-        ),
-        inline=False
-    )
-
-    embed2.add_field(
-        name="8. Política contra Spam, Autopromoción y Mensajes Directos",
-        value=(
-            "No se permite el envío repetitivo de mensajes (flood), cadenas de texto, enlaces de referidos, promoción "
-            "de canales personales, venta de cursos ni invitaciones a otros servidores sin autorización previa de la "
-            "administración. Asimismo, está prohibido enviar mensajes privados (DM) no solicitados a miembros del "
-            "servidor con fines comerciales, de reclutamiento o spam."
-        ),
-        inline=False
-    )
-
-    embed2.add_field(
-        name="9. Uso de Canales de Voz y Sesiones de Trabajo",
-        value=(
-            "En las salas de voz destinadas a programación en pareja (Pair Programming) y estudio se debe mantener un "
-            "entorno ordenado y libre de ruidos molestos. Si tu entorno presenta ruido constante, utiliza la opción de "
-            "pulsar para hablar (Push-to-Talk) o silencia el micrófono cuando no estés interviniendo."
-        ),
-        inline=False
-    )
-
-    embed2.add_field(
-        name="10. Moderación y Régimen de Sanciones",
-        value=(
-            "El equipo de administración vela por el cumplimiento de este reglamento. El incumplimiento de las normas "
-            "dará lugar a medidas correctivas proporcionales a la falta:\n"
-            "1. Advertencia formal e indicación de corrección.\n"
-            "2. Restricción temporal de escritura o acceso a canales de voz (Timeout).\n"
-            "3. Expulsión del servidor en caso de reincidencia.\n"
-            "4. Bloqueo definitivo inmediato ante difusión de malware, estafas, ataques al servidor o faltas graves de respeto."
-        ),
-        inline=False
-    )
-
-    embed2.set_footer(text="Normativa oficial del servidor • Enfoque en ingeniería de software y colaboración")
-    return [embed1, embed2]
+    embed.set_footer(text="Normativa oficial • Lectura rápida y cumplimiento obligatorio")
+    return [embed]
 
 def create_project_template_embed() -> discord.Embed:
     """Plantilla limpia y estructurada para la publicación de proyectos."""

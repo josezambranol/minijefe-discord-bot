@@ -112,7 +112,7 @@ class CommunityCog(commands.Cog, name="Comunidad y Recursos"):
         self._startup_polish_done = True
 
         for guild in self.bot.guilds:
-            notif_key = f"server_polish_v3_95dev_{guild.id}"
+            notif_key = f"server_polish_v4_short_rules_{guild.id}"
             if await has_notification_been_sent(notif_key):
                 continue
             try:
