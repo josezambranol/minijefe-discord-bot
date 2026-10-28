@@ -140,11 +140,17 @@ async def ask_gemini(
                 res_data = json.loads(response.read().decode("utf-8"))
                 candidates = res_data.get("candidates", [])
                 if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
+                    first = candidates[0]
+                    if first.get("finishReason") == "SAFETY":
+                        return "⚠️ *[MiniJefe]* Ese mensaje activó los filtros de seguridad de la IA. ¡Hablemos de código o tecnología mejor!"
+                    parts = first.get("content", {}).get("parts", [])
                     if parts:
                         return parts[0].get("text", "").strip()
         except urllib.error.HTTPError as e:
-            logger.warning(f"urllib HTTPError {e.code}: {e.read().decode('utf-8')[:150]}")
+            if e.code == 429:
+                logger.warning(f"urllib Rate limit (429) alcanzado en Gemini.")
+            else:
+                logger.warning(f"urllib HTTPError {e.code}: {e.read().decode('utf-8')[:120]}")
         except Exception as e:
             logger.warning(f"urllib error: {e}")
         return None
@@ -163,9 +169,15 @@ async def ask_gemini(
                             data = await resp.json()
                             candidates = data.get("candidates", [])
                             if candidates:
-                                parts = candidates[0].get("content", {}).get("parts", [])
+                                first = candidates[0]
+                                if first.get("finishReason") == "SAFETY":
+                                    return "⚠️ *[MiniJefe]* Ese mensaje activó los filtros de seguridad de la IA. ¡Hablemos de código o tecnología mejor!"
+                                parts = first.get("content", {}).get("parts", [])
                                 if parts:
                                     return parts[0].get("text", "").strip()
+                        elif resp.status == 429:
+                            logger.warning(f"Rate limit / Cuota (429) alcanzada con modelo {model}. Probando siguiente modelo...")
+                            continue
                         else:
                             err_text = await resp.text()
                             logger.warning(f"Error con modelo {model} (Status {resp.status}): {err_text[:120]}")

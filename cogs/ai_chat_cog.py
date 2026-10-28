@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import random
+import time
 import logging
 from collections import defaultdict, deque
 from typing import Dict, Deque, Literal
@@ -19,6 +20,8 @@ class AIChatCog(commands.Cog, name="IA y Charla Viva"):
         self.bot = bot
         # channel_id -> deque de {"role": "user"|"model", "content": str}
         self.channel_conversations: Dict[int, Deque[dict]] = defaultdict(lambda: deque(maxlen=8))
+        # user_id -> timestamp del último llamado a la IA para proteger la cuota de la API
+        self.user_last_ai_time: Dict[int, float] = {}
 
     def clean_mentions(self, content: str) -> str:
         """Remueve las menciones del bot del texto para pasarlo limpio a la IA."""
@@ -73,6 +76,18 @@ class AIChatCog(commands.Cog, name="IA y Charla Viva"):
             await message.reply(random.choice(natural_calls), mention_author=False)
             return
 
+        # Protección de cuota de API (cooldown anti-abuso de 3 segundos por usuario, excepto Jordy y admins)
+        now = time.time()
+        if not is_jordy and not message.author.guild_permissions.administrator:
+            last_call = self.user_last_ai_time.get(message.author.id, 0)
+            if now - last_call < 3.0:
+                await message.reply(
+                    f"⏳ ¡Aguanta un toque, {author_name}! Dame 3 segunditos entre preguntas para no saturar los circuitos ⚡",
+                    mention_author=False
+                )
+                return
+            self.user_last_ai_time[message.author.id] = now
+
         personality = settings.get("ai_personality", "amigable")
         history = list(self.channel_conversations[message.channel.id])
 
@@ -101,6 +116,7 @@ class AIChatCog(commands.Cog, name="IA y Charla Viva"):
 
     @app_commands.command(name="hablar", description="Charla directamente con MiniJefe o hazle cualquier pregunta con IA")
     @app_commands.describe(mensaje="Lo que le quieras preguntar o comentar a MiniJefe")
+    @app_commands.checks.cooldown(1, 3.0)
     async def slash_ask(self, interaction: discord.Interaction, mensaje: str):
         """Comando slash para interactuar con la IA de MiniJefe."""
         try:

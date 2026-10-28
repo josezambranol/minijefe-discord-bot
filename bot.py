@@ -29,7 +29,24 @@ else:
 if os.path.exists("/etc/secrets/.env"):
     load_dotenv("/etc/secrets/.env")
 
-TOKEN = os.getenv("DISCORD_TOKEN")
+def get_discord_token() -> Optional[str]:
+    """Obtiene el token de Discord desde .env, variables de entorno o Secret Files de Render."""
+    token = os.getenv("DISCORD_TOKEN")
+    if token and token != "TU_TOKEN_DE_DISCORD_AQUI":
+        return token.strip()
+    if os.path.isdir("/etc/secrets"):
+        for fname in os.listdir("/etc/secrets"):
+            if "DISCORD" in fname.upper() or "TOKEN" in fname.upper():
+                try:
+                    with open(os.path.join("/etc/secrets", fname), "r", encoding="utf-8") as f:
+                        val = f.read().strip()
+                        if val and len(val) > 30 and not val.startswith("#"):
+                            return val
+                except Exception:
+                    pass
+    return token
+
+TOKEN = get_discord_token()
 
 # Configuración de logs
 logging.basicConfig(
