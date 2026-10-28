@@ -4,27 +4,23 @@ from discord import app_commands
 import time
 import re
 import logging
+from datetime import datetime, timezone, timedelta
 from collections import defaultdict, deque
 from typing import Dict, Deque, Optional
 
 from database import get_guild_settings, update_guild_setting
-from utils.embeds import COLOR_WARNING, COLOR_SUCCESS, COLOR_DANGER
+from utils.embeds import COLOR_WARNING, COLOR_SUCCESS, COLOR_DANGER, COLOR_INFO
 
 logger = logging.getLogger("MiniJefe.Moderation")
 
 class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
-    """Detección inteligente de spam con alertas amigables y personalizadas de MiniJefe."""
+    """Detección inteligente de spam y herramientas avanzadas de limpieza de chat."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Estructuras en memoria para seguimiento de actividad
-        # user_id -> deque de timestamps (segundos)
         self.user_message_times: Dict[int, Deque[float]] = defaultdict(lambda: deque(maxlen=10))
-        # user_id -> deque de (texto, timestamp)
         self.user_message_history: Dict[int, Deque[tuple[str, float]]] = defaultdict(lambda: deque(maxlen=5))
-        # user_id -> último timestamp de advertencia emitida para evitar spamear advertencias
         self.last_warn_time: Dict[int, float] = {}
-        # user_id -> conteo de infracciones recientes (expira con el tiempo)
         self.warn_counts: Dict[int, int] = defaultdict(int)
 
     def is_exempt(self, message: discord.Message) -> bool:
@@ -49,27 +45,88 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        """Intercepta mensajes para moderación y órdenes de limpieza."""
+        """Intercepta mensajes para moderación y órdenes directas de limpieza de chat."""
         if not message.guild or message.author.bot:
             return
 
-        # 1. Orden directa de borrar mensajes por chat: '@MiniJefe borra 5 mensajes'
+        # 1. Órdenes directas de moderación por chat (ej: '@MiniJefe limpia 20 mensajes de @usuario')
         if self.bot.user and self.bot.user in message.mentions and self.is_exempt(message):
             text = message.content.lower()
-            match = re.search(r"(?:borra|elimina|limpia|purge)\s+(\d+)", text)
-            if match:
-                count = min(int(match.group(1)), 100)
-                if message.channel.permissions_for(message.guild.me).manage_messages:
-                    try:
+            keywords = ["borra", "elimina", "limpia", "purge", "clear"]
+            if any(k in text for k in keywords):
+                # Extraer cantidad (si no se especifica, por defecto 25)
+                count_match = re.search(r"\b(\d+)\b", text)
+                count = min(int(count_match.group(1)), 100) if count_match else 25
+
+                # Extraer canal objetivo (si se mencionó #canal)
+                target_channel = message.channel
+                if message.channel_mentions:
+                    target_channel = message.channel_mentions[0]
+
+                # Extraer usuario objetivo (si se mencionó a alguien que no sea el bot)
+                target_user = None
+                other_mentions = [m for m in message.mentions if m.id != self.bot.user.id]
+                if other_mentions:
+                    target_user = other_mentions[0]
+
+                # Extraer días (ej: "últimos 2 días" o "hace 1 dia")
+                dias_match = re.search(r"(\d+)\s*(?:dia|dias|día|días)", text)
+                dias = int(dias_match.group(1)) if dias_match else None
+
+                # Detectar si es solo spam
+                solo_spam = ("spam" in text or "enlaces" in text or "links" in text)
+
+                # Validar permisos en el canal objetivo
+                bot_perms = target_channel.permissions_for(message.guild.me)
+                if not bot_perms.manage_messages:
+                    await message.reply(f"❌ Se requiere el permiso de **Gestionar Mensajes** en {target_channel.mention}.", mention_author=False)
+                    return
+
+                now_utc = datetime.now(timezone.utc)
+                threshold_dt = (now_utc - timedelta(days=dias)) if dias else None
+                oldest_bulk = now_utc - timedelta(days=14)
+                after_arg = threshold_dt if threshold_dt and threshold_dt > oldest_bulk else oldest_bulk
+
+                def check(m: discord.Message) -> bool:
+                    if target_user and m.author.id != target_user.id:
+                        return False
+                    if threshold_dt and m.created_at < threshold_dt:
+                        return False
+                    if solo_spam:
+                        c = m.content.lower()
+                        if "discord.gg/" in c or "http://" in c or "https://" in c or len(m.mentions) >= 3 or "@everyone" in c:
+                            return True
+                        return False
+                    return True
+
+                try:
+                    if target_channel.id == message.channel.id:
                         await message.delete()
-                        deleted = await message.channel.purge(limit=count)
-                        confirm = await message.channel.send(f"🧹 Se han eliminado **{len(deleted)} mensajes** correctamente.")
-                        await confirm.delete(delay=4)
-                        return
-                    except Exception as e:
-                        logger.warning(f"Error al purgar mensajes por chat: {e}")
-                else:
-                    await message.reply("❌ Se requiere el permiso de **Gestionar Mensajes** (`Manage Messages`) para eliminar mensajes.", mention_author=False)
+
+                    deleted = await target_channel.purge(
+                        limit=count,
+                        check=check,
+                        after=after_arg,
+                        bulk=True,
+                        reason=f"Orden de limpieza por chat de {message.author.display_name}"
+                    )
+
+                    desc_parts = [f"**{len(deleted)} mensajes**"]
+                    if target_user:
+                        desc_parts.append(f"de {target_user.mention}")
+                    if dias:
+                        desc_parts.append(f"de los últimos {dias} día(s)")
+                    if solo_spam:
+                        desc_parts.append("(spam/enlaces)")
+                    if target_channel.id != message.channel.id:
+                        desc_parts.append(f"en {target_channel.mention}")
+
+                    confirm = await message.channel.send(f"🧹 Se han eliminado {' '.join(desc_parts)} correctamente.")
+                    await confirm.delete(delay=5)
+                    return
+                except Exception as e:
+                    logger.warning(f"Error al purgar mensajes por chat: {e}")
+                    await message.channel.send(f"❌ Ocurrió un error al eliminar los mensajes: {e}", delete_after=5)
                     return
 
         if self.is_exempt(message):
@@ -120,40 +177,37 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
                 )
                 return
 
-        # --- C. CHECK MAYÚSCULAS EXCESIVAS (Gritos sostenidos: >25 caracteres y >75% caps) ---
-        letters = [c for c in content if c.isalpha()]
-        if len(letters) >= 25:
-            upper_count = sum(1 for c in letters if c.isupper())
-            if (upper_count / len(letters)) >= 0.75:
+        # --- C. CHECK MAYÚSCULAS EXCESIVAS (>75% mayúsculas en mensajes largos) ---
+        if len(content) > 25:
+            upper_count = sum(1 for char in content if char.isupper())
+            ratio = upper_count / len(content)
+            if ratio > 0.75:
                 await self.handle_violation(
                     message,
                     reason="caps",
                     friendly_text=(
-                        f"¡Tranquilo vaquero {message.author.mention}! 📢\n"
-                        f"Esas mayúsculas retumbaron hasta el servidor de al lado. Desactiva el Bloq Mayús y charlemos tranquilos 😎."
+                        f"Atención, {message.author.mention}: Por favor evita escribir en mayúsculas sostenidas."
                     ),
                     delete_trigger=False
                 )
                 return
 
-        # --- D. CHECK MENCIONES MASIVAS (>5 menciones en un solo mensaje) ---
+        # --- D. CHECK MENCIONES MASIVAS NO AUTORIZADAS (>=5 menciones en un solo mensaje) ---
         if len(message.mentions) >= 5:
             await self.handle_violation(
                 message,
-                reason="mass_mentions",
+                reason="mass_mention",
                 friendly_text=(
-                    f"⚠️ {message.author.mention}, ojo con las menciones masivas.\n"
-                    f"Cuidado con etiquetar a media galaxia en un solo mensaje, cuidemos la paz de las notificaciones."
+                    f"Atención, {message.author.mention}: El uso masivo de menciones no está permitido en el servidor."
                 ),
                 delete_trigger=True
             )
             return
 
     async def handle_violation(self, message: discord.Message, reason: str, friendly_text: str, delete_trigger: bool):
-        """Maneja la advertencia amigable y el control de escalado."""
+        """Maneja la advertencia y el control de escalado ante infracciones de spam."""
         user_id = message.author.id
 
-        # Intentar borrar el mensaje si corresponde y el bot tiene permisos
         if delete_trigger:
             try:
                 if message.channel.permissions_for(message.guild.me).manage_messages:
@@ -161,87 +215,191 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
             except Exception as e:
                 logger.warning(f"No se pudo borrar mensaje de spam: {e}")
 
-        # Enviar advertencia amigable solo si no está en cooldown
         if await self.can_send_warning(user_id):
             self.warn_counts[user_id] += 1
             current_warns = self.warn_counts[user_id]
 
             embed = discord.Embed(
-                title="🛡️ Alerta de Convivencia — MiniJefe",
+                title="🛡️ Notificación de Moderación",
                 description=friendly_text,
                 color=COLOR_WARNING
             )
-            embed.set_footer(text=f"Aviso #{current_warns} • Mantengamos el servidor amigable y limpio.")
+            embed.set_footer(text=f"Aviso #{current_warns} • Mantengamos un entorno de desarrollo ordenado.")
 
             try:
-                # Enviarlo y auto-borrar la advertencia del bot tras 12 segundos para no generar más ruido
                 sent_msg = await message.channel.send(content=f"👋 {message.author.mention}", embed=embed)
-                await sent_msg.delete(delay=12)
+                await sent_msg.delete(delay=10)
             except Exception as e:
                 logger.error(f"Error enviando alerta anti-spam: {e}")
 
-            # Si ya van 3 advertencias acumuladas, notificar a los moderadores
             if current_warns >= 3:
                 await self.notify_moderators(message, current_warns)
 
     async def notify_moderators(self, message: discord.Message, count: int):
-        """Avisa a los moderadores si un usuario ignora reiteradas advertencias."""
-        # Buscar un canal de moderación o auditoría
+        """Avisa a los moderadores si un usuario ignora reiteradas advertencias de spam."""
         mod_channel = discord.utils.get(message.guild.text_channels, name="mod-logs") or \
                       discord.utils.get(message.guild.text_channels, name="moderacion") or \
                       discord.utils.get(message.guild.text_channels, name="staff")
 
         if mod_channel and mod_channel.permissions_for(message.guild.me).send_messages:
             embed = discord.Embed(
-                title="🚨 MiniJefe Reporte: Reincidencia de Spam",
-                description=f"El usuario {message.author.mention} (`{message.author.id}`) ha recibido **{count} advertencias de spam** en {message.channel.mention}.",
+                title="🚨 Reporte de Moderación: Reincidencia de Spam",
+                description=f"El usuario {message.author.mention} (`{message.author.id}`) ha acumulado **{count} advertencias de spam** en {message.channel.mention}.",
                 color=COLOR_DANGER
             )
+            embed.set_footer(text=f"Servidor: {message.guild.name}")
             await mod_channel.send(embed=embed)
 
-    @app_commands.command(name="config-antispam", description="Activa o desactiva el escudo anti-spam de MiniJefe")
-    @app_commands.describe(activar="True para activar la protección de spam, False para desactivarla")
+    @app_commands.command(name="config-antispam", description="Activa o desactiva la protección automática contra spam")
+    @app_commands.describe(activar="True para activar la protección, False para desactivarla")
     @app_commands.default_permissions(administrator=True)
     async def toggle_antispam(self, interaction: discord.Interaction, activar: bool):
         val = 1 if activar else 0
         await update_guild_setting(interaction.guild_id, "spam_shield_enabled", val)
         status_text = "ACTIVADO 🛡️" if activar else "DESACTIVADO 💤"
         embed = discord.Embed(
-            title="🛡️ Escudo Anti-Spam de MiniJefe",
-            description=f"El sistema inteligente de detección y alertas de spam ha sido: **{status_text}**.",
+            title="🛡️ Escudo Anti-Spam",
+            description=f"El sistema de detección y mitigación de spam ha sido: **{status_text}**.",
             color=COLOR_SUCCESS if activar else COLOR_WARNING
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="limpiar", description="Elimina una cantidad de mensajes recientes de este canal")
+    @app_commands.command(
+        name="limpiar",
+        description="Elimina mensajes con filtros avanzados (canal, usuario, fecha/días, spam o bots)"
+    )
     @app_commands.describe(
-        cantidad="Número de mensajes a eliminar (entre 1 y 100)",
-        usuario="Opcional: Solo borrar los mensajes de este usuario específico"
+        cantidad="Cantidad de mensajes a revisar/eliminar (entre 1 y 100, por defecto 50)",
+        canal="Opcional: Canal donde se ejecutará la limpieza (por defecto el canal actual)",
+        usuario="Opcional: Solo borrar los mensajes de este usuario específico",
+        dias="Opcional: Solo borrar mensajes enviados en los últimos X días (1 a 14 días)",
+        solo_spam="Opcional: Si es True, solo borra mensajes con enlaces sospechosos, invites o flood",
+        solo_bots="Opcional: Si es True, solo borra mensajes generados por bots"
     )
     @app_commands.default_permissions(manage_messages=True)
     async def purge_messages(
         self,
         interaction: discord.Interaction,
-        cantidad: app_commands.Range[int, 1, 100],
-        usuario: Optional[discord.Member] = None
+        cantidad: app_commands.Range[int, 1, 100] = 50,
+        canal: Optional[discord.TextChannel] = None,
+        usuario: Optional[discord.User] = None,
+        dias: Optional[app_commands.Range[int, 1, 14]] = None,
+        solo_spam: Optional[bool] = False,
+        solo_bots: Optional[bool] = False
     ):
-        if not interaction.channel.permissions_for(interaction.guild.me).manage_messages:
-            await interaction.response.send_message("❌ No tengo el permiso de **Gestionar Mensajes** (`Manage Messages`) en este canal.", ephemeral=True)
+        """Comando slash avanzado de purga de chat con filtros múltiples."""
+        target_channel = canal or interaction.channel
+        if not isinstance(target_channel, discord.TextChannel):
+            await interaction.response.send_message("❌ El canal indicado debe ser un canal de texto.", ephemeral=True)
+            return
+
+        bot_perms = target_channel.permissions_for(interaction.guild.me)
+        if not bot_perms.manage_messages:
+            await interaction.response.send_message(
+                f"❌ El bot no tiene el permiso de **Gestionar Mensajes** (`Manage Messages`) en {target_channel.mention}.",
+                ephemeral=True
+            )
+            return
+        if not bot_perms.read_message_history:
+            await interaction.response.send_message(
+                f"❌ El bot no tiene el permiso de **Leer el Historial de Mensajes** (`Read Message History`) en {target_channel.mention}.",
+                ephemeral=True
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        def check(m):
-            if usuario:
-                return m.author.id == usuario.id
+        now_utc = datetime.now(timezone.utc)
+        threshold_dt = (now_utc - timedelta(days=dias)) if dias is not None else None
+        oldest_bulk = now_utc - timedelta(days=14)
+        after_arg = threshold_dt if threshold_dt and threshold_dt > oldest_bulk else oldest_bulk
+
+        def check(m: discord.Message) -> bool:
+            # 1. Filtro por usuario
+            if usuario and m.author.id != usuario.id:
+                return False
+            # 2. Filtro por bots
+            if solo_bots and not m.author.bot:
+                return False
+            # 3. Filtro por fecha / días
+            if threshold_dt and m.created_at < threshold_dt:
+                return False
+            # 4. Filtro por spam
+            if solo_spam:
+                c = m.content.lower()
+                is_spam = False
+                if "discord.gg/" in c or "discord.com/invite/" in c or "http://" in c or "https://" in c:
+                    is_spam = True
+                elif len(m.mentions) >= 3 or len(m.role_mentions) >= 2 or "@everyone" in c or "@here" in c:
+                    is_spam = True
+                elif len(m.content) > 15 and (sum(1 for char in m.content if char.isupper()) / len(m.content)) > 0.75:
+                    is_spam = True
+                if not is_spam:
+                    return False
             return True
 
         try:
-            deleted = await interaction.channel.purge(limit=cantidad, check=check)
-            target_str = f" de {usuario.mention}" if usuario else ""
-            await interaction.followup.send(f"🧹 Se eliminaron con éxito **{len(deleted)} mensajes**{target_str}.", ephemeral=True)
+            deleted = await target_channel.purge(
+                limit=cantidad,
+                check=check,
+                after=after_arg,
+                bulk=True,
+                reason=f"Limpieza ejecutada por {interaction.user.display_name} ({interaction.user.id})"
+            )
+
+            details = []
+            if usuario:
+                details.append(f"del usuario {usuario.mention}")
+            if dias:
+                details.append(f"de los últimos {dias} día(s)")
+            if solo_spam:
+                details.append("(solo spam/enlaces)")
+            if solo_bots:
+                details.append("(solo bots)")
+
+            details_str = f" {', '.join(details)}" if details else ""
+            in_channel_str = f" en {target_channel.mention}" if target_channel.id != interaction.channel_id else ""
+
+            embed = discord.Embed(
+                title="🧹 Limpieza de Chat Exitosa",
+                description=(
+                    f"Se han eliminado **{len(deleted)} mensajes**{details_str}{in_channel_str}.\n"
+                    f"*(El historial ha quedado depurado correctamente).*"
+                ),
+                color=COLOR_SUCCESS
+            )
+            embed.set_footer(text=f"Servidor: {interaction.guild.name} • Moderación")
+            await interaction.followup.send(embed=embed, ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ Error al eliminar mensajes: {e}", ephemeral=True)
+            logger.error(f"Error ejecutando /limpiar: {e}", exc_info=True)
+            await interaction.followup.send(f"❌ Ocurrió un error al eliminar los mensajes: {e}", ephemeral=True)
+
+    @app_commands.command(
+        name="limpiar-spam",
+        description="Elimina ráfagas de spam, enlaces y mensajes sospechosos en cualquier canal"
+    )
+    @app_commands.describe(
+        canal="Opcional: Canal donde se limpiará el spam (por defecto este canal)",
+        cantidad="Cantidad de mensajes a escanear (por defecto 50)"
+    )
+    @app_commands.default_permissions(manage_messages=True)
+    async def purge_spam_direct(
+        self,
+        interaction: discord.Interaction,
+        canal: Optional[discord.TextChannel] = None,
+        cantidad: app_commands.Range[int, 1, 100] = 50
+    ):
+        """Atajo directo para limpiar spam en cualquier canal."""
+        await self.purge_messages.callback(
+            self,
+            interaction=interaction,
+            cantidad=cantidad,
+            canal=canal,
+            usuario=None,
+            dias=None,
+            solo_spam=True,
+            solo_bots=False
+        )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ModerationCog(bot))
