@@ -48,12 +48,14 @@ class TaskBot(commands.Bot):
         await init_db()
         logger.info("Base de datos inicializada correctamente.")
 
-        # 2. Cargar extensiones / Cogs
+        # 2. Cargar extensiones / Cogs optimizados para el servidor comunitario
         extensions = [
-            "cogs.tasks_cog",
-            "cogs.schedule_cog",
-            "cogs.admin_cog",
-            "cogs.reminders_loop"
+            "cogs.periodic_reminders_cog",
+            "cogs.ai_chat_cog",
+            "cogs.welcome_cog",
+            "cogs.moderation_cog",
+            "cogs.daily_plans_cog",
+            "cogs.admin_cog"
         ]
 
 
@@ -80,7 +82,7 @@ class TaskBot(commands.Bot):
         
         activity = discord.Activity(
             type=discord.ActivityType.watching,
-            name="tus pendientes | /tareas"
+            name="el servidor 24/7 | @MiniJefe o /hablar"
         )
         await self.change_presence(status=discord.Status.online, activity=activity)
 

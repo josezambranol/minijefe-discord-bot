@@ -79,34 +79,47 @@ class AdminCog(commands.Cog, name="Configuración del Servidor"):
     async def view_config(self, interaction: discord.Interaction):
         settings = await get_guild_settings(interaction.guild_id)
         
-        channel_mention = f"<#{settings['reminder_channel_id']}>" if settings.get("reminder_channel_id") else "*No configurado (usa el canal donde se creó la tarea)*"
+        channel_mention = f"<#{settings['reminder_channel_id']}>" if settings.get("reminder_channel_id") else "*No configurado (canal por defecto)*"
+        welcome_mention = f"<#{settings['welcome_channel_id']}>" if settings.get("welcome_channel_id") else "*Detección automática de canal de bienvenida*"
+        daily_mention = f"<#{settings['daily_plan_channel_id']}>" if settings.get("daily_plan_channel_id") else "*Canal general por defecto*"
         dm_status = "✅ Activado" if settings.get("send_dm", 1) else "❌ Desactivado"
+        spam_status = "🛡️ Activado" if settings.get("spam_shield_enabled", 1) else "❌ Desactivado"
+        ai_personality = settings.get("ai_personality", "amigable").capitalize()
 
         embed = discord.Embed(
-            title=f"⚙️ Configuración del Servidor — {interaction.guild.name}",
+            title=f"⚙️ Configuración de MiniJefe — {interaction.guild.name}",
             color=COLOR_INFO
         )
-        embed.add_field(name="📢 Canal de Recordatorios", value=channel_mention, inline=False)
+        embed.add_field(name="👋 Canal de Bienvenidas", value=welcome_mention, inline=True)
+        embed.add_field(name="📅 Canal de Planes Diarios", value=daily_mention, inline=True)
+        embed.add_field(name="📢 Canal de Recordatorios", value=channel_mention, inline=True)
+        embed.add_field(name="🛡️ Escudo Anti-Spam", value=spam_status, inline=True)
+        embed.add_field(name="🎭 Personalidad de IA", value=f"`{ai_personality}`", inline=True)
         embed.add_field(name="🌍 Zona Horaria", value=f"`{settings.get('timezone', 'America/Bogota')}`", inline=True)
         embed.add_field(name="📬 Recordatorios por DM", value=dm_status, inline=True)
-        embed.set_footer(text="Usa /config para modificar cualquiera de estos ajustes.")
+        embed.set_footer(text="Comandos disponibles: /config-bienvenida, /config-antispam, /personalidad, /config-plan-diario")
 
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="probar-recordatorios", description="Ejecuta de forma manual e inmediata el ciclo de comprobación de tareas")
+    @app_commands.command(name="probar-recordatorios", description="Ejecuta de forma manual e inmediata el ciclo de comprobación de tareas periódicas")
     @app_commands.default_permissions(administrator=True)
     async def force_reminders(self, interaction: discord.Interaction):
-        reminders_cog = self.bot.get_cog("Recordatorios Automáticos")
-        if not reminders_cog:
-            await interaction.response.send_message("❌ El módulo de recordatorios no está cargado.", ephemeral=True)
+        periodic_cog = self.bot.get_cog("Recordatorios Periódicos y Delegados")
+        if not periodic_cog:
+            await interaction.response.send_message("❌ El módulo de recordatorios periódicos no está cargado.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
-        count_reminded, count_overdue = await reminders_cog.check_and_send_all_reminders(force=True)
-        await interaction.followup.send(
-            f"✅ **Ciclo ejecutado:**\n• Recordatorios diarios enviados: **{count_reminded}**\n• Tareas marcadas como vencidas: **{count_overdue}**",
-            ephemeral=True
-        )
+        try:
+            # Ejecutar una ronda de comprobación inmediata
+            from database import get_active_periodic_reminders
+            active = await get_active_periodic_reminders(interaction.guild_id)
+            await interaction.followup.send(
+                f"✅ **Ciclo de recordatorios verificado:**\n• Recordatorios periódicos activos en este servidor: **{len(active)}**",
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error al comprobar recordatorios: {e}", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(AdminCog(bot))

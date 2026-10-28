@@ -22,7 +22,8 @@ tasks.db
 *.rar
 
 # Archivos del sistema y logs
-
+enviar.py
+test_bot.py
 *.log
 .DS_Store
 Thumbs.db

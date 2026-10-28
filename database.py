@@ -59,18 +59,58 @@ async def init_db():
                 PRIMARY KEY (guild_id, category)
             )
         """)
+
+        # Tabla para planes y actividades diarias de la comunidad
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS daily_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                creator_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                time_text TEXT,
+                plan_date TEXT NOT NULL,
+                is_completed INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        # Tabla para recordatorios periódicos y tareas delegadas (cada X horas/minutos)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS periodic_reminders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                channel_id INTEGER NOT NULL,
+                creator_id INTEGER NOT NULL,
+                assigned_user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                interval_minutes INTEGER NOT NULL,
+                send_dm INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'active',
+                last_reminded_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                completed_at TEXT
+            )
+        """)
         
         # Índices para consultas rápidas
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_guild_status ON tasks(guild_id, status)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_user_id, status)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_daily_plans ON daily_plans(guild_id, plan_date)")
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_periodic_reminders ON periodic_reminders(guild_id, status)")
         
         # Migraciones automáticas de columnas
         migrations = [
             "ALTER TABLE tasks ADD COLUMN overdue_alert_sent INTEGER DEFAULT 0",
             "ALTER TABLE tasks ADD COLUMN due_date_text TEXT",
             "ALTER TABLE tasks ADD COLUMN grade_notes TEXT",
-            "ALTER TABLE tasks ADD COLUMN completed_by_id INTEGER"
+            "ALTER TABLE tasks ADD COLUMN completed_by_id INTEGER",
+            "ALTER TABLE guild_settings ADD COLUMN welcome_channel_id INTEGER",
+            "ALTER TABLE guild_settings ADD COLUMN spam_shield_enabled INTEGER DEFAULT 1",
+            "ALTER TABLE guild_settings ADD COLUMN daily_plan_channel_id INTEGER",
+            "ALTER TABLE guild_settings ADD COLUMN daily_plan_hour INTEGER DEFAULT 8",
+            "ALTER TABLE guild_settings ADD COLUMN ai_chat_enabled INTEGER DEFAULT 1",
+            "ALTER TABLE guild_settings ADD COLUMN ai_personality TEXT DEFAULT 'amigable'"
         ]
         for mig in migrations:
             try:
@@ -316,3 +356,136 @@ async def get_last_panel_message(guild_id: int, category: str) -> Optional[Dict[
         """, (guild_id, category)) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
+
+
+# ===================================================================
+# GESTIÓN DE PLANES Y ACTIVIDADES DIARIAS DEL SERVIDOR
+# ===================================================================
+
+async def add_daily_plan(guild_id: int, creator_id: int, title: str, time_text: str, plan_date: str) -> int:
+    """Registra una nueva actividad o plan en la agenda diaria."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO daily_plans (guild_id, creator_id, title, time_text, plan_date, is_completed, created_at)
+            VALUES (?, ?, ?, ?, ?, 0, ?)
+        """, (guild_id, creator_id, title, time_text, plan_date, now_iso))
+        await db.commit()
+        return cursor.lastrowid
+
+async def get_daily_plans_for_date(guild_id: int, plan_date: str) -> List[Dict[str, Any]]:
+    """Obtiene todos los planes para una fecha específica (YYYY-MM-DD)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT * FROM daily_plans 
+            WHERE guild_id = ? AND plan_date = ?
+            ORDER BY id ASC
+        """, (guild_id, plan_date)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def toggle_daily_plan(plan_id: int) -> bool:
+    """Alterna el estado completado/pendiente de un plan diario."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            UPDATE daily_plans
+            SET is_completed = CASE WHEN is_completed = 1 THEN 0 ELSE 1 END
+            WHERE id = ?
+        """, (plan_id,))
+        await db.commit()
+        return True
+
+async def delete_daily_plan(plan_id: int) -> bool:
+    """Elimina un plan de la agenda diaria."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("DELETE FROM daily_plans WHERE id = ?", (plan_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+# ===================================================================
+# GESTIÓN DE RECORDATORIOS PERIÓDICOS Y TAREAS DELEGADAS
+# ===================================================================
+
+async def add_periodic_reminder(
+    guild_id: int,
+    channel_id: int,
+    creator_id: int,
+    assigned_user_id: int,
+    title: str,
+    interval_minutes: int,
+    send_dm: int = 0
+) -> int:
+    """Crea un recordatorio recurrente cada X minutos."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            INSERT INTO periodic_reminders (
+                guild_id, channel_id, creator_id, assigned_user_id,
+                title, interval_minutes, send_dm, status,
+                last_reminded_at, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+        """, (guild_id, channel_id, creator_id, assigned_user_id, title, interval_minutes, send_dm, now_iso, now_iso))
+        await db.commit()
+        return cursor.lastrowid
+
+async def get_active_periodic_reminders(guild_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Obtiene todos los recordatorios periódicos activos."""
+    query = "SELECT * FROM periodic_reminders WHERE status = 'active'"
+    params = []
+    if guild_id:
+        query += " AND guild_id = ?"
+        params.append(guild_id)
+    query += " ORDER BY id DESC"
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(query, tuple(params)) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+async def get_periodic_reminder(reminder_id: int) -> Optional[Dict[str, Any]]:
+    """Obtiene un recordatorio periódico por su ID."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM periodic_reminders WHERE id = ?", (reminder_id,)) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+async def update_periodic_reminder_sent(reminder_id: int, now_iso: str) -> bool:
+    """Actualiza la fecha y hora del último aviso enviado."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            UPDATE periodic_reminders
+            SET last_reminded_at = ?
+            WHERE id = ?
+        """, (now_iso, reminder_id))
+        await db.commit()
+        return True
+
+async def complete_periodic_reminder(reminder_id: int) -> bool:
+    """Marca un recordatorio periódico como completado y detiene futuros avisos."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            UPDATE periodic_reminders
+            SET status = 'completed', completed_at = ?
+            WHERE id = ? AND status = 'active'
+        """, (now_iso, reminder_id))
+        await db.commit()
+        return cursor.rowcount > 0
+
+async def cancel_periodic_reminder(reminder_id: int) -> bool:
+    """Cancela un recordatorio periódico."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            UPDATE periodic_reminders
+            SET status = 'cancelled', completed_at = ?
+            WHERE id = ? AND status = 'active'
+        """, (now_iso, reminder_id))
+        await db.commit()
+        return cursor.rowcount > 0
+
+
