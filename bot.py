@@ -2,6 +2,7 @@ import os
 import sys
 import asyncio
 import logging
+from typing import Optional
 from dotenv import load_dotenv
 
 if sys.platform == "win32":
@@ -177,10 +178,21 @@ async def async_main():
     bot = TaskBot()
     bot.tree.on_error = bot.on_tree_error
 
+    async def run_bot_resilient():
+        while True:
+            try:
+                await bot.start(TOKEN)
+            except discord.LoginFailure:
+                logger.error("Token de Discord inválido. Verifica la variable DISCORD_TOKEN.")
+                break
+            except Exception as e:
+                logger.warning(f"Conexión con Discord perdida o interrumpida ({e}). Reintentando en 5s...")
+                await asyncio.sleep(5)
+
     # Iniciar servidor web y bot de Discord juntos
     await asyncio.gather(
         run_web_server(),
-        bot.start(TOKEN)
+        run_bot_resilient()
     )
 
 def main():
