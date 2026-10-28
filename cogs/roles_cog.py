@@ -4,38 +4,38 @@ from discord import app_commands
 import logging
 from typing import List, Optional
 
-from utils.embeds import create_roles_panel_embed, COLOR_SUCCESS, COLOR_WARNING, COLOR_PRIMARY
+from utils.embeds import create_roles_panel_embed, COLOR_SUCCESS, COLOR_WARNING, COLOR_DARK
 from utils.reporting import log_to_reports
 
 logger = logging.getLogger("MiniJefe.Roles")
 
-# Definición de roles estándar para la comunidad dev
+# Definición de roles técnicos limpios y sin ruido visual
 SPECIALTY_ROLES = [
-    {"name": "Frontend Developer", "emoji": "💻", "desc": "HTML, CSS, React, Vue, Angular, Next"},
-    {"name": "Backend Developer", "emoji": "⚙️", "desc": "Java, Python, Node, Spring, APIs, DBs"},
-    {"name": "Fullstack Developer", "emoji": "🌐", "desc": "Frontend + Backend end-to-end"},
-    {"name": "Mobile Developer", "emoji": "📱", "desc": "Android, iOS, Flutter, React Native"},
-    {"name": "DevOps / Cloud", "emoji": "☁️", "desc": "Docker, Kubernetes, CI/CD, AWS, Linux"},
-    {"name": "UI / UX Designer", "emoji": "🎨", "desc": "Figma, diseño de interfaces y experiencia"},
-    {"name": "Data & AI", "emoji": "🤖", "desc": "Machine Learning, Data Science, Python, IA"},
-    {"name": "QA & Software Tester", "emoji": "🧪", "desc": "Testing automatizado, calidad de código"}
+    {"name": "Frontend Developer", "desc": "Interfaces web, HTML, CSS, React, Angular, Vue"},
+    {"name": "Backend Developer", "desc": "Servicios, APIs, lógica de negocio y bases de datos"},
+    {"name": "Fullstack Developer", "desc": "Desarrollo integral Frontend y Backend"},
+    {"name": "Mobile Developer", "desc": "Aplicaciones móviles Android, iOS, Flutter, React Native"},
+    {"name": "DevOps / Cloud", "desc": "Infraestructura, Docker, CI/CD, Linux y Cloud"},
+    {"name": "UI / UX Designer", "desc": "Diseño de interfaces, prototipado y experiencia de usuario"},
+    {"name": "Data & AI", "desc": "Ingeniería de datos, análisis, Machine Learning e IA"},
+    {"name": "QA & Software Tester", "desc": "Aseguramiento de calidad y pruebas automatizadas"}
 ]
 
 LANGUAGE_ROLES = [
-    {"name": "Java", "emoji": "☕", "desc": "Java SE, Spring Boot, POO, Maven"},
-    {"name": "Python", "emoji": "🐍", "desc": "Python, Django, FastAPI, Data"},
-    {"name": "JavaScript / TypeScript", "emoji": "🟨", "desc": "JS, TS, Node, React, Vue"},
-    {"name": "C / C++", "emoji": "🔷", "desc": "Sistemas, embebidos, alto rendimiento"},
-    {"name": "C# / .NET", "emoji": "💜", "desc": ".NET Core, C#, Unity, Azure"},
-    {"name": "Rust", "emoji": "🦀", "desc": "Memory safe, sistemas y alto rendimiento"},
-    {"name": "Go (Golang)", "emoji": "🐹", "desc": "Microservicios, concurrencia, backend"},
-    {"name": "PHP", "emoji": "🐘", "desc": "PHP, Laravel, desarrollo web"}
+    {"name": "Java", "desc": "Desarrollo con Java SE, POO y ecosistema JVM"},
+    {"name": "Spring Boot", "desc": "Microservicios, Spring Security, JPA y APIs empresariales"},
+    {"name": "Python", "desc": "Backend con FastAPI/Django, automatización y ciencia de datos"},
+    {"name": "JavaScript / TypeScript", "desc": "Ecosistema web, Node.js, TypeScript y frameworks modernos"},
+    {"name": "C / C++", "desc": "Programación de sistemas, algoritmos y alto rendimiento"},
+    {"name": "C# / .NET", "desc": "Desarrollo con plataforma .NET, C# y servicios backend"},
+    {"name": "Go (Golang)", "desc": "Servicios concurrentes, microservicios y sistemas distribuidos"},
+    {"name": "SQL / Bases de Datos", "desc": "Modelado relacional, PostgreSQL, MySQL y optimización"}
 ]
 
 NOTIFICATION_ROLES = [
-    {"name": "Notificaciones Anuncios", "emoji": "📢", "desc": "Avisos importantes del servidor"},
-    {"name": "Notificaciones Proyectos", "emoji": "🚀", "desc": "Nuevas convocatorias y colaboraciones"},
-    {"name": "Notificaciones Eventos", "emoji": "📚", "desc": "Talleres, directos y charlas de estudio"}
+    {"name": "Notificaciones Anuncios", "desc": "Avisos generales y actualizaciones del servidor"},
+    {"name": "Notificaciones Proyectos", "desc": "Convocatorias para colaborar en proyectos de software"},
+    {"name": "Notificaciones Eventos", "desc": "Sesiones de estudio, talleres técnicos y actividades"}
 ]
 
 SPECIALTY_NAMES = [r["name"] for r in SPECIALTY_ROLES]
@@ -44,103 +44,130 @@ NOTIFICATION_NAMES = [r["name"] for r in NOTIFICATION_ROLES]
 ALL_MANAGED_ROLE_NAMES = SPECIALTY_NAMES + LANGUAGE_NAMES + NOTIFICATION_NAMES
 
 
+def get_role_color(role_name: str) -> discord.Color:
+    """Devuelve el color sobrio correspondiente según la categoría del rol."""
+    if role_name in SPECIALTY_NAMES:
+        return discord.Color(0x3B82F6)
+    if role_name in LANGUAGE_NAMES:
+        return discord.Color(0x0EA5E9)
+    return discord.Color(0x64748B)
+
+
 async def apply_role_changes(
     interaction: discord.Interaction,
-    selected_role_names: List[str],
-    category_role_names: List[str]
+    selected_role_names: List[str]
 ):
     """
-    Aplica cambios de roles por lote de forma ultra-rápida y sin latencia.
-    Difiere la interacción de inmediato para garantizar respuesta instantánea (<100ms).
+    Aplica cambios de roles en modo alternancia (Toggle) sin latencia:
+    - Si el usuario selecciona un rol que NO tiene, se le asigna.
+    - Si el usuario selecciona un rol que YA tiene, se le retira.
+    - Si el rol aún no existe en el servidor, el bot lo crea automáticamente.
+    - Al finalizar, restablece el menú desplegable para permitir nuevas selecciones inmediatas.
     """
     await interaction.response.defer(ephemeral=True)
     guild = interaction.guild
     member = interaction.user
 
     if not guild or not isinstance(member, discord.Member):
-        await interaction.followup.send("❌ No se pudo identificar al usuario en el servidor.", ephemeral=True)
+        await interaction.followup.send("No se pudo identificar tu perfil en el servidor.", ephemeral=True)
         return
 
-    # Buscar roles en memoria usando el caché local del servidor (evita peticiones de red lentas)
+    if not selected_role_names:
+        await interaction.followup.send("No seleccionaste ningún rol en el menú.", ephemeral=True)
+        return
+
     roles_cache = {r.name.lower(): r for r in guild.roles}
     member_role_ids = {r.id for r in member.roles}
+    bot_top_role = guild.me.top_role
 
     to_add = []
     to_remove = []
-    missing_roles = []
+    hierarchy_blocked = []
 
-    for name in category_role_names:
+    for name in selected_role_names:
         role = roles_cache.get(name.lower())
+
+        # Si el rol no existe en el servidor, crearlo automáticamente
+        if not role and guild.me.guild_permissions.manage_roles:
+            try:
+                role = await guild.create_role(
+                    name=name,
+                    color=get_role_color(name),
+                    mentionable=False,
+                    reason="Creación automática de rol técnico solicitado en el panel"
+                )
+                roles_cache[name.lower()] = role
+            except Exception as e:
+                logger.warning(f"No se pudo crear automáticamente el rol '{name}': {e}")
+
         if not role:
-            if name in selected_role_names:
-                missing_roles.append(name)
             continue
 
-        is_selected = (name in selected_role_names)
-        has_role = (role.id in member_role_ids)
+        # Verificar jerarquía de roles para evitar bloqueos Forbidden 403
+        if role >= bot_top_role and guild.owner_id != guild.me.id:
+            hierarchy_blocked.append(role.name)
+            continue
 
-        if is_selected and not has_role:
-            to_add.append(role)
-        elif not is_selected and has_role:
+        if role.id in member_role_ids:
             to_remove.append(role)
+        else:
+            to_add.append(role)
 
-    # Si faltan roles en el servidor por crear
-    missing_warn = ""
-    if missing_roles:
-        missing_warn = f"\n⚠️ *Nota: Los roles [{', '.join(missing_roles)}] aún no han sido creados en el servidor.*"
-
-    # Aplicar cambios en lote
     try:
         if to_add:
-            await member.add_roles(*to_add, reason="MiniJefe: Auto-asignación de roles rápida")
+            await member.add_roles(*to_add, reason="Asignación de roles desde panel de perfil")
         if to_remove:
-            await member.remove_roles(*to_remove, reason="MiniJefe: Auto-desasignación de roles")
+            await member.remove_roles(*to_remove, reason="Retiro de roles desde panel de perfil")
     except discord.Forbidden:
         await interaction.followup.send(
-            "🚫 **Permiso denegado por Discord:** El rol de **MiniJefe** debe estar ubicado en la lista de roles "
-            "**por encima** de los roles que intenta asignar. Por favor verifica la jerarquía de roles en los Ajustes del Servidor.",
+            "Permiso insuficiente: El rol del bot debe estar ubicado por encima de los roles técnicos en "
+            "Ajustes del Servidor > Roles.",
             ephemeral=True
         )
         return
     except Exception as e:
-        logger.error(f"Error al cambiar roles de {member.display_name}: {e}")
-        await interaction.followup.send(f"❌ Error al procesar los roles: {e}", ephemeral=True)
+        logger.error(f"Error al actualizar roles de {member.display_name}: {e}")
+        await interaction.followup.send(f"Error al actualizar tus roles: {e}", ephemeral=True)
         return
 
-    # Confirmación al usuario
-    if not to_add and not to_remove:
-        await interaction.followup.send(
-            "ℹ️ Tus roles ya coinciden exactamente con tu selección." + missing_warn,
-            ephemeral=True
-        )
-        return
-
-    added_text = ", ".join([f"`{r.name}`" for r in to_add]) if to_add else "Ninguno"
-    removed_text = ", ".join([f"`{r.name}`" for r in to_remove]) if to_remove else "Ninguno"
-
-    await interaction.followup.send(
-        f"⚡ **¡Roles actualizados al instante!**\n\n"
-        f"➕ **Añadidos:** {added_text}\n"
-        f"➖ **Removidos:** {removed_text}"
-        f"{missing_warn}",
-        ephemeral=True
-    )
-
-    # Registrar en #reportes
+    # Restablecer el estado visual de los menús desplegables en el mensaje del canal
     try:
-        await log_to_reports(
-            guild=guild,
-            title="Actualización de Roles de Usuario",
-            description=f"El miembro {member.mention} actualizó sus roles desde el panel interactivo.",
-            action_type="roles",
-            user=member,
-            fields=[
-                ("Roles añadidos (+)", added_text, True),
-                ("Roles removidos (-)", removed_text, True)
-            ]
+        if interaction.message:
+            await interaction.message.edit(view=RolesPanelView())
+    except Exception:
+        pass
+
+    lines = ["**Perfil técnico actualizado:**"]
+    if to_add:
+        lines.append("Asignados: " + ", ".join([f"`{r.name}`" for r in to_add]))
+    if to_remove:
+        lines.append("Retirados: " + ", ".join([f"`{r.name}`" for r in to_remove]))
+    if hierarchy_blocked:
+        lines.append(
+            "No modificados por jerarquía de permisos: " +
+            ", ".join([f"`{n}`" for n in hierarchy_blocked]) +
+            " *(el rol del bot debe estar por encima en Ajustes del Servidor)*"
         )
-    except Exception as e:
-        logger.warning(f"Error al registrar cambio de roles en #reportes: {e}")
+
+    await interaction.followup.send("\n".join(lines), ephemeral=True)
+
+    if to_add or to_remove:
+        try:
+            added_str = ", ".join([r.name for r in to_add]) if to_add else "Ninguno"
+            removed_str = ", ".join([r.name for r in to_remove]) if to_remove else "Ninguno"
+            await log_to_reports(
+                guild=guild,
+                title="Actualización de Roles de Perfil",
+                description=f"El integrante {member.mention} actualizó sus roles técnicos.",
+                action_type="roles",
+                user=member,
+                fields=[
+                    ("Roles asignados", added_str, True),
+                    ("Roles retirados", removed_str, True)
+                ]
+            )
+        except Exception as e:
+            logger.warning(f"Error al registrar cambio de roles en reportes: {e}")
 
 
 class SpecialtySelect(discord.ui.Select):
@@ -149,21 +176,20 @@ class SpecialtySelect(discord.ui.Select):
             discord.SelectOption(
                 label=r["name"],
                 value=r["name"],
-                description=r["desc"][:100],
-                emoji=r["emoji"]
+                description=r["desc"][:100]
             )
             for r in SPECIALTY_ROLES
         ]
         super().__init__(
-            placeholder="💼 Selecciona tus Especialidades / Áreas...",
-            min_values=0,
+            placeholder="Seleccionar o retirar Especialidad...",
+            min_values=1,
             max_values=len(options),
             options=options,
             custom_id="roles_specialty_select"
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await apply_role_changes(interaction, self.values, SPECIALTY_NAMES)
+        await apply_role_changes(interaction, self.values)
 
 
 class LanguageSelect(discord.ui.Select):
@@ -172,21 +198,20 @@ class LanguageSelect(discord.ui.Select):
             discord.SelectOption(
                 label=r["name"],
                 value=r["name"],
-                description=r["desc"][:100],
-                emoji=r["emoji"]
+                description=r["desc"][:100]
             )
             for r in LANGUAGE_ROLES
         ]
         super().__init__(
-            placeholder="💻 Selecciona tus Lenguajes de Programación...",
-            min_values=0,
+            placeholder="Seleccionar o retirar Lenguajes y Tecnologías...",
+            min_values=1,
             max_values=len(options),
             options=options,
             custom_id="roles_language_select"
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await apply_role_changes(interaction, self.values, LANGUAGE_NAMES)
+        await apply_role_changes(interaction, self.values)
 
 
 class NotificationSelect(discord.ui.Select):
@@ -195,25 +220,24 @@ class NotificationSelect(discord.ui.Select):
             discord.SelectOption(
                 label=r["name"],
                 value=r["name"],
-                description=r["desc"][:100],
-                emoji=r["emoji"]
+                description=r["desc"][:100]
             )
             for r in NOTIFICATION_ROLES
         ]
         super().__init__(
-            placeholder="🔔 Selecciona tus Notificaciones / Pings...",
-            min_values=0,
+            placeholder="Seleccionar o retirar Preferencias de Avisos...",
+            min_values=1,
             max_values=len(options),
             options=options,
             custom_id="roles_notification_select"
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await apply_role_changes(interaction, self.values, NOTIFICATION_NAMES)
+        await apply_role_changes(interaction, self.values)
 
 
 class RolesPanelView(discord.ui.View):
-    """Vista persistente que sobrevive a reinicios del bot para el panel de roles."""
+    """Vista persistente para el panel de configuración de roles."""
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(SpecialtySelect())
@@ -221,7 +245,7 @@ class RolesPanelView(discord.ui.View):
         self.add_item(NotificationSelect())
 
     @discord.ui.button(
-        label="🧹 Limpiar Todos Mis Roles",
+        label="Retirar todos mis roles",
         style=discord.ButtonStyle.secondary,
         custom_id="roles_clear_all_btn"
     )
@@ -231,126 +255,162 @@ class RolesPanelView(discord.ui.View):
         member = interaction.user
 
         if not guild or not isinstance(member, discord.Member):
-            await interaction.followup.send("❌ Error al identificar tu usuario.", ephemeral=True)
+            await interaction.followup.send("No se pudo identificar tu usuario.", ephemeral=True)
             return
 
         roles_cache = {r.name.lower(): r for r in guild.roles}
+        bot_top_role = guild.me.top_role
         to_remove = []
 
         for name in ALL_MANAGED_ROLE_NAMES:
             role = roles_cache.get(name.lower())
             if role and role in member.roles:
-                to_remove.append(role)
+                if role < bot_top_role or guild.owner_id == guild.me.id:
+                    to_remove.append(role)
 
         if not to_remove:
-            await interaction.followup.send("ℹ️ No tienes ningún rol de desarrollo o notificación asignado actualmente.", ephemeral=True)
+            await interaction.followup.send("No tienes ningún rol técnico asignado actualmente.", ephemeral=True)
             return
 
         try:
-            await member.remove_roles(*to_remove, reason="MiniJefe: Limpieza de roles solicitada por el usuario")
+            await member.remove_roles(*to_remove, reason="Restablecimiento completo de roles solicitado por el usuario")
             removed_list = ", ".join([f"`{r.name}`" for r in to_remove])
-            await interaction.followup.send(f"🧹 **Se han removido los siguientes roles:**\n{removed_list}", ephemeral=True)
+            await interaction.followup.send(f"**Se han retirado todos tus roles técnicos:**\n{removed_list}", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ Error al limpiar roles: {e}", ephemeral=True)
+            await interaction.followup.send(f"Error al retirar roles: {e}", ephemeral=True)
+
+
+async def ensure_all_managed_roles(guild: discord.Guild) -> List[str]:
+    """Verifica y crea en el servidor todos los roles técnicos que aún no existan."""
+    if not guild.me.guild_permissions.manage_roles:
+        return []
+    existing = {r.name.lower() for r in guild.roles}
+    created = []
+    for name in ALL_MANAGED_ROLE_NAMES:
+        if name.lower() not in existing:
+            try:
+                await guild.create_role(
+                    name=name,
+                    color=get_role_color(name),
+                    mentionable=False,
+                    reason="Configuración de roles técnicos del servidor"
+                )
+                created.append(name)
+            except Exception as e:
+                logger.warning(f"Error creando rol '{name}': {e}")
+    return created
+
+
+async def deploy_clean_roles_panel(channel: discord.TextChannel) -> Optional[discord.Message]:
+    """Elimina paneles antiguos del bot en el canal de roles y publica el panel limpio actualizado."""
+    guild = channel.guild
+    await ensure_all_managed_roles(guild)
+
+    # Limpiar mensajes previos enviados por el bot en este canal
+    try:
+        async for msg in channel.history(limit=30):
+            if msg.author.id == guild.me.id:
+                try:
+                    await msg.delete()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"No se pudieron limpiar mensajes previos en #{channel.name}: {e}")
+
+    embed = create_roles_panel_embed()
+    view = RolesPanelView()
+    return await channel.send(embed=embed, view=view)
 
 
 class RolesCog(commands.Cog, name="Roles"):
-    """Gestión optimizada y sin latencia de roles interactivos para la comunidad."""
+    """Gestión de roles técnicos para la comunidad."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="panel-roles", description="Publica el panel interactivo de roles en el canal de roles")
-    @app_commands.describe(canal="Canal donde se publicará el panel (por defecto el canal actual)")
-    @app_commands.default_permissions(administrator=True)
-    async def slash_panel_roles(self, interaction: discord.Interaction, canal: Optional[discord.TextChannel] = None):
-        """Publica el panel interactivo de auto-asignación de roles."""
-        target_channel = canal or interaction.channel
-        if not isinstance(target_channel, discord.TextChannel):
-            await interaction.response.send_message("❌ Debes especificar un canal de texto válido.", ephemeral=True)
+    @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        """Auto-recuperación: si el mensaje del panel en #roles se borra por accidente, lo vuelve a publicar."""
+        if not payload.guild_id:
+            return
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild:
+            return
+        channel = guild.get_channel(payload.channel_id)
+        if not isinstance(channel, discord.TextChannel):
             return
 
-        embed = create_roles_panel_embed()
-        view = RolesPanelView()
+        clean_name = "".join(c for c in channel.name.lower() if c.isalnum())
+        if "rol" not in clean_name:
+            return
+
+        # Verificar si quedó algún mensaje del bot en el canal de roles
+        try:
+            has_bot_panel = False
+            async for msg in channel.history(limit=15):
+                if msg.author.id == guild.me.id and msg.embeds:
+                    has_bot_panel = True
+                    break
+            if not has_bot_panel and channel.permissions_for(guild.me).send_messages:
+                logger.info(f"Panel de roles eliminado accidentalmente en #{channel.name}. Regenerando panel...")
+                await channel.send(embed=create_roles_panel_embed(), view=RolesPanelView())
+        except Exception as e:
+            logger.warning(f"Error en auto-regeneración del panel de roles: {e}")
+
+    @app_commands.command(name="panel-roles", description="Limpia mensajes antiguos y publica el panel actualizado de roles")
+    @app_commands.describe(canal="Canal donde se publicará el panel (por defecto el canal de roles o el actual)")
+    @app_commands.default_permissions(administrator=True)
+    async def slash_panel_roles(self, interaction: discord.Interaction, canal: Optional[discord.TextChannel] = None):
+        """Publica el panel interactivo de auto-asignación de roles borrando los anteriores."""
+        await interaction.response.defer(ephemeral=True)
+        target_channel = canal or interaction.channel
+        if not isinstance(target_channel, discord.TextChannel):
+            await interaction.followup.send("Debes especificar un canal de texto válido.", ephemeral=True)
+            return
 
         try:
-            await target_channel.send(embed=embed, view=view)
-            await interaction.response.send_message(
-                f"✅ ¡Panel interactivo de roles publicado con éxito en {target_channel.mention}!",
+            await deploy_clean_roles_panel(target_channel)
+            await interaction.followup.send(
+                f"Panel de roles actualizado y publicado en {target_channel.mention}.",
                 ephemeral=True
             )
         except discord.Forbidden:
-            await interaction.response.send_message(
-                f"❌ No tengo permisos para enviar mensajes en {target_channel.mention}.",
+            await interaction.followup.send(
+                f"No tengo permisos para gestionar o enviar mensajes en {target_channel.mention}.",
                 ephemeral=True
             )
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error al publicar panel: {e}", ephemeral=True)
+            await interaction.followup.send(f"Error al publicar el panel de roles: {e}", ephemeral=True)
 
-    @app_commands.command(name="crear-roles-default", description="Crea automáticamente en el servidor los roles dev que falten")
+    @app_commands.command(name="crear-roles-default", description="Verifica y crea automáticamente los roles técnicos del servidor")
     @app_commands.default_permissions(administrator=True)
     async def slash_create_default_roles(self, interaction: discord.Interaction):
         """Crea en Discord todos los roles gestionados si aún no existen."""
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if not guild:
-            await interaction.followup.send("❌ Servidor no encontrado.", ephemeral=True)
+            await interaction.followup.send("Servidor no encontrado.", ephemeral=True)
             return
 
-        existing_role_names = {r.name.lower() for r in guild.roles}
-        created = []
-        already_present = []
+        created = await ensure_all_managed_roles(guild)
+        created_str = ", ".join([f"`{n}`" for n in created]) if created else "Ninguno (todos ya estaban creados)"
 
-        # Configuración de colores para roles por categoría
-        color_specialty = discord.Color(0x3498DB)     # Azul
-        color_language = discord.Color(0xE67E22)      # Naranja dev
-        color_notification = discord.Color(0x9B59B6)  # Púrpura
-
-        role_configs = [
-            (SPECIALTY_NAMES, color_specialty),
-            (LANGUAGE_NAMES, color_language),
-            (NOTIFICATION_NAMES, color_notification)
-        ]
-
-        for names, color in role_configs:
-            for name in names:
-                if name.lower() in existing_role_names:
-                    already_present.append(name)
-                else:
-                    try:
-                        await guild.create_role(
-                            name=name,
-                            color=color,
-                            mentionable=False,
-                            reason="MiniJefe: Creación automática de roles dev para la comunidad"
-                        )
-                        created.append(name)
-                    except Exception as e:
-                        logger.error(f"Error creando rol '{name}': {e}")
-
-        created_str = ", ".join([f"`{n}`" for n in created]) if created else "Ninguno (todos ya existían)"
         await interaction.followup.send(
-            f"✅ **Verificación y Creación de Roles Completada:**\n\n"
-            f"🆕 **Roles creados ({len(created)}):** {created_str}\n"
-            f"📌 **Roles existentes ({len(already_present)}):** Ya estaban listos.\n\n"
-            f"💡 *Recuerda asegurarte de que el rol de MiniJefe esté por encima de estos roles en los Ajustes del Servidor.*",
+            f"**Verificación de roles completada:**\n"
+            f"Roles nuevos creados ({len(created)}): {created_str}",
             ephemeral=True
         )
 
         try:
             await log_to_reports(
                 guild=guild,
-                title="Creación y Verificación de Roles Dev",
-                description=f"Se crearon **{len(created)} roles** nuevos en el servidor.",
+                title="Verificación de Roles Técnicos",
+                description=f"Se verificaron los roles del servidor ({len(created)} nuevos creados).",
                 action_type="roles",
-                user=interaction.user,
-                fields=[
-                    ("Roles creados", created_str, False),
-                    ("Roles existentes", str(len(already_present)), True)
-                ]
+                user=interaction.user
             )
-        except Exception as e:
-            logger.warning(f"Error al reportar creación de roles en #reportes: {e}")
+        except Exception:
+            pass
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(RolesCog(bot))

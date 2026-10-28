@@ -84,15 +84,16 @@ async def run_tests():
     print("\n[3/5] Validando generadores de Embeds...")
     rules = create_server_rules_embeds()
     assert len(rules) == 2, "Deben generarse 2 embeds de reglas"
+    assert len(rules[0].fields) + len(rules[1].fields) == 10, "El reglamento debe tener las 10 secciones completas"
     proj = create_project_template_embed()
-    assert "PLANTILLA OFICIAL" in proj.title, "Fallo en plantilla de proyectos"
+    assert "PROYECTOS" in proj.title, "Fallo en plantilla de proyectos"
     road = create_roadmap_template_embed()
     assert "ROADMAP" in road.title, "Fallo en plantilla de roadmap"
     pres = create_presentation_template_embed()
     assert "PRESENTACIÓN" in pres.title, "Fallo en plantilla de presentación"
     roles = create_roles_panel_embed()
-    assert "PANEL DE ROLES" in roles.title, "Fallo en panel de roles"
-    print("  ✅ Todos los embeds y plantillas construidos correctamente: OK")
+    assert "ROLES" in roles.title, "Fallo en panel de roles"
+    print("  ✅ Todos los embeds y plantillas construidos correctamente (10 secciones de reglas sin ruido): OK")
 
     # 4. Estado de la IA (Gemini)
     print("\n[4/5] Verificando clave de API de Gemini...")

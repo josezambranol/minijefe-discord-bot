@@ -74,25 +74,39 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
         return writable_channels[0]
 
     def create_welcome_embed(self, member: discord.Member, quote: str) -> discord.Embed:
-        """Crea el embed estético y profesional para la bienvenida."""
+        """Crea el embed limpio y profesional para la bienvenida."""
+        guild = member.guild
+
+        def get_ch_ref(kw_list, fallback_str):
+            for ch in guild.text_channels:
+                clean = normalize_channel_name(ch.name)
+                if any(k in clean for k in kw_list):
+                    return ch.mention
+            return f"**#{fallback_str}**"
+
+        reglas_ref = get_ch_ref(["regla", "rules"], "reglas")
+        roles_ref = get_ch_ref(["role", "rol"], "roles")
+        pres_ref = get_ch_ref(["presentaci"], "presentaciones")
+        proj_ref = get_ch_ref(["proyecto"], "proyectos")
+
         embed = discord.Embed(
-            title="👋 ¡Bienvenido/a a la comunidad!",
+            title=f"Bienvenido/a a {guild.name}",
             description=(
-                f"Le damos una cordial bienvenida a {member.mention} a **{member.guild.name}**.\n\n"
-                f"💬 **Mensaje de Bienvenida:**\n> *\"{quote}\"*\n\n"
-                f"✨ **Ruta inicial recomendada:**\n"
-                f"• Selecciona tus tecnologías en **#roles**.\n"
-                f"• Preséntate ante el equipo en **#presentaciones**.\n"
-                f"• Revisa las directrices en **#reglas** y comparte tus ideas en **#proyectos-colaboracion**.\n"
-                f"• Si requieres asistencia técnica o deseas registrar tareas, mencióname con `@{self.bot.user.name}` o usa `/hablar`."
+                f"Damos la bienvenida a {member.mention} a la comunidad de desarrollo.\n\n"
+                f"> *{quote}*\n\n"
+                f"**Primeros pasos recomendados:**\n"
+                f"- Revisa la normativa del servidor en {reglas_ref}.\n"
+                f"- Configura tus lenguajes y áreas técnicas en {roles_ref}.\n"
+                f"- Comparte tu perfil y tecnologías en {pres_ref}.\n"
+                f"- Explora o publica iniciativas de código en {proj_ref}."
             ),
             color=COLOR_PRIMARY
         )
         embed.set_thumbnail(url=member.display_avatar.url)
         embed.set_image(url="attachment://welcome_card.png")
         embed.set_footer(
-            text=f"Miembro #{member.guild.member_count} • Comunidad de {member.guild.name} • ¡Mucho éxito en tus proyectos!",
-            icon_url=member.guild.icon.url if member.guild.icon else None
+            text=f"Integrante #{guild.member_count} • {guild.name}",
+            icon_url=guild.icon.url if guild.icon else None
         )
         return embed
 
@@ -123,7 +137,7 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
             )
             file = discord.File(card_buf, filename="welcome_card.png")
             await channel.send(
-                content=f"🎉 ¡Bienvenido/a {member.mention} a la comunidad de **{member.guild.name}**!",
+                content=f"Bienvenido/a {member.mention} a **{member.guild.name}**.",
                 embed=embed,
                 file=file
             )
@@ -134,7 +148,7 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
             try:
                 embed.set_image(url=None)
                 await channel.send(
-                    content=f"🎉 ¡Bienvenido/a {member.mention} a la comunidad de **{member.guild.name}**!",
+                    content=f"Bienvenido/a {member.mention} a **{member.guild.name}**.",
                     embed=embed
                 )
             except Exception as e2:

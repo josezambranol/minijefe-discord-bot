@@ -23,22 +23,19 @@ from utils.embeds import (
 logger = logging.getLogger("MiniJefe.Reporting")
 
 ACTION_STYLES = {
-    "setup": ("🚀 Implementación / Setup", COLOR_SUCCESS),
-    "moderacion": ("🧹 Moderación / Purga", COLOR_WARNING),
-    "roles": ("🎭 Gestión de Roles", 0x9B59B6),
-    "recordatorio": ("📋 Tareas & Recordatorios", COLOR_INFO),
-    "bienvenida": ("👋 Bienvenida de Miembro", COLOR_PRIMARY),
-    "config": ("⚙️ Configuración del Servidor", 0x1ABC9C),
-    "autonomo": ("🤖 Actividad Autónoma", 0x34495E),
-    "sistema": ("🟢 Notificación del Sistema", COLOR_SUCCESS)
+    "setup": ("Implementación / Arquitectura", COLOR_SUCCESS),
+    "moderacion": ("Moderación / Limpieza", COLOR_WARNING),
+    "roles": ("Gestión de Roles", 0x6366F1),
+    "recordatorio": ("Tareas y Recordatorios", COLOR_INFO),
+    "bienvenida": ("Ingreso de Integrante", COLOR_PRIMARY),
+    "config": ("Configuración del Servidor", 0x1E293B),
+    "autonomo": ("Operación Autónoma", 0x1E293B),
+    "sistema": ("Estado del Sistema", COLOR_SUCCESS)
 }
 
 async def get_or_create_reports_channel(guild: discord.Guild) -> Optional[discord.TextChannel]:
     """
-    Localiza o crea automáticamente el canal #reportes del servidor:
-    1. Verifica si ya está configurado en guild_settings.
-    2. Busca un canal existente con nombre similar ('reportes', 'reporte', 'logs-bot', 'auditoria').
-    3. Si no existe y el bot tiene permisos de Manage Channels, lo crea con permisos de solo lectura para miembros.
+    Localiza o crea automáticamente el canal #reportes del servidor (privado para Administración).
     """
     # 1. Configuración previa en DB
     try:
@@ -62,22 +59,18 @@ async def get_or_create_reports_channel(guild: discord.Guild) -> Optional[discor
                     pass
                 return ch
 
-    # 3. Crear automáticamente el canal #reportes si hay permisos
+    # 3. Crear automáticamente el canal #reportes privado para Administración
     if guild.me.guild_permissions.manage_channels:
         try:
-            # Buscar categoría recomendada ("Inicio", "Administración", "Staff")
             category = (
-                discord.utils.get(guild.categories, name="Inicio") or
                 discord.utils.get(guild.categories, name="Administración") or
                 discord.utils.get(guild.categories, name="Staff")
             )
 
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(
-                    read_messages=True,
-                    send_messages=False,
-                    read_message_history=True,
-                    add_reactions=True
+                    read_messages=False,
+                    send_messages=False
                 ),
                 guild.me: discord.PermissionOverwrite(
                     read_messages=True,
