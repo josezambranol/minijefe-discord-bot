@@ -34,9 +34,9 @@ def create_server_rules_embeds() -> List[discord.Embed]:
         description=(
             "¡Bienvenido/a a la comunidad! Este espacio está creado para desarrolladores, diseñadores y apasionados de la tecnología. "
             "El objetivo es construir proyectos, compartir conocimiento, resolver dudas y crecer juntos.\n\n"
-            "👑 **Autoridad del Servidor:**\n"
-            "> El fundador y máxima autoridad de la comunidad es **Jordy (el Jefe)**, acompañado por el equipo de **Staff / Moderación**. "
-            "Sus decisiones en materia de convivencia y proyectos son definitivas.\n\n"
+            "🛡️ **Moderación y Convivencia:**\n"
+            "> El equipo de **Staff / Moderación** vela por el orden y la sana convivencia del servidor. "
+            "Sus decisiones en materia de moderación y proyectos son definitivas para el bienestar de la comunidad.\n\n"
             "Al participar en el servidor, aceptas cumplir las siguientes directrices obligatorias:"
         ),
         color=COLOR_PRIMARY
@@ -81,7 +81,7 @@ def create_server_rules_embeds() -> List[discord.Embed]:
         name="🚫 4. No Spam, No DMs Invasivos ni Publicidad",
         value=(
             "• **Mensajes directos (DMs):** Queda prohibido escribirle a miembros por privado para promocionar servicios, vender cursos o hacer ofertas no solicitadas sin su consentimiento previo.\n"
-            "• **Autopromoción:** No enlaces a canales de YouTube, redes personales o servidores externos sin autorización del Jefe Jordy o Staff.\n"
+            "• **Autopromoción:** No enlaces a canales de YouTube, redes personales o servidores externos sin autorización previa del Staff.\n"
             "• **Menciones:** Evita el uso injustificado de `@everyone` o `@here`."
         ),
         inline=False
@@ -107,7 +107,7 @@ def create_server_rules_embeds() -> List[discord.Embed]:
         inline=False
     )
 
-    embed2.set_footer(text="MiniJefe • Mantengamos limpio el entorno de desarrollo | Servidor de Jordy")
+    embed2.set_footer(text="MiniJefe • Mantengamos limpio y profesional el entorno de desarrollo")
     return [embed1, embed2]
 
 def create_project_template_embed() -> discord.Embed:

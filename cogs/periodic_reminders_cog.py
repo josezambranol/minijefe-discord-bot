@@ -18,13 +18,8 @@ from utils.embeds import COLOR_WARNING, COLOR_SUCCESS, COLOR_DANGER, COLOR_INFO
 
 logger = logging.getLogger("MiniJefe.PeriodicReminders")
 
-# ID del Fundador y Máxima Autoridad del Servidor
-JORDY_ID = 710931815271235645  # jordy (Fundador / El Jefe)
-
-def is_boss_or_staff(member: discord.Member) -> bool:
-    """Verifica si un usuario es Jordy (el Jefe), o miembro del staff/admin."""
-    if member.id == JORDY_ID:
-        return True
+def is_staff(member: discord.Member) -> bool:
+    """Verifica si un usuario cuenta con permisos de moderación o administración en el servidor."""
     if member.guild and member.id == member.guild.owner_id:
         return True
     if member.guild_permissions.administrator or member.guild_permissions.manage_guild or member.guild_permissions.manage_messages:
@@ -53,34 +48,35 @@ class PeriodicReminderActionView(discord.ui.View):
 
     @discord.ui.button(label="✅ Marcar como Listo", style=discord.ButtonStyle.success, custom_id="btn_complete_periodic")
     async def btn_complete(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Solo el usuario asignado, el creador o un jefe pueden completarlo
         user = interaction.user
         member = interaction.guild.get_member(user.id) if interaction.guild else None
         is_authorized = (
             user.id == self.assigned_user_id or
             user.id == self.creator_id or
-            (member and is_boss_or_staff(member))
+            (member and is_staff(member))
         )
 
         if not is_authorized:
-            await interaction.response.send_message("❌ Esta tarea está asignada a otro usuario. Solo ellos o los jefes pueden completarla.", ephemeral=True)
+            await interaction.response.send_message("❌ Esta tarea está asignada a otro usuario. Solo la persona asignada, quien la creó o el Staff pueden completarla.", ephemeral=True)
             return
 
         success = await complete_periodic_reminder(self.reminder_id)
         if success:
             button.disabled = True
             button.label = f"✅ Completada por {user.display_name}"
-            # Desactivar botón cancelar también
             for child in self.children:
                 child.disabled = True
 
-            await interaction.response.edit_message(view=self)
-            await interaction.followup.send(
-                f"🎉 **¡Tarea completada!** Gran trabajo {user.mention}. El recordatorio periódico ha sido desactivado.",
-                ephemeral=False
+            embed = discord.Embed(
+                title="🎉 Tarea Finalizada",
+                description=f"La tarea **#{self.reminder_id}** ha sido completada por {user.mention}.\n*(Se han desactivado los recordatorios periódicos).*",
+                color=COLOR_SUCCESS
             )
+            embed.set_footer(text=f"Servidor: {interaction.guild.name if interaction.guild else 'Comunidad'}")
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(embed=embed)
         else:
-            await interaction.response.send_message("⚠️ Esta tarea ya había sido completada o cancelada anteriormente.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Esta tarea ya no se encuentra activa o ya fue completada.", ephemeral=True)
 
     @discord.ui.button(label="🛑 Cancelar Recordatorio", style=discord.ButtonStyle.danger, custom_id="btn_cancel_periodic")
     async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -88,26 +84,33 @@ class PeriodicReminderActionView(discord.ui.View):
         member = interaction.guild.get_member(user.id) if interaction.guild else None
         is_authorized = (
             user.id == self.creator_id or
-            (member and is_boss_or_staff(member))
+            user.id == self.assigned_user_id or
+            (member and is_staff(member))
         )
 
         if not is_authorized:
-            await interaction.response.send_message("❌ Solo el creador de la tarea o un jefe/admin pueden cancelar este recordatorio.", ephemeral=True)
+            await interaction.response.send_message("❌ Solo quien creó la tarea, la persona asignada o un miembro del Staff pueden cancelarla.", ephemeral=True)
             return
 
         success = await cancel_periodic_reminder(self.reminder_id)
         if success:
             for child in self.children:
                 child.disabled = True
-            button.label = "🛑 Recordatorio Cancelado"
+
+            embed = discord.Embed(
+                title="🛑 Recordatorio Cancelado",
+                description=f"El recordatorio **#{self.reminder_id}** fue cancelado por {user.mention}.\nNo se enviarán más avisos.",
+                color=COLOR_DANGER
+            )
+            embed.set_footer(text=f"Servidor: {interaction.guild.name if interaction.guild else 'Comunidad'}")
             await interaction.response.edit_message(view=self)
-            await interaction.followup.send(f"🛑 El recordatorio #{self.reminder_id} fue cancelado por {user.mention}.", ephemeral=False)
+            await interaction.followup.send(embed=embed)
         else:
             await interaction.response.send_message("⚠️ Este recordatorio ya no está activo.", ephemeral=True)
 
 
 class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Delegados"):
-    """Permite a Jordy (el Jefe) o Staff asignar tareas y recordar a usuarios cada X tiempo."""
+    """Permite asignar tareas y recordar a usuarios periódicamente en el servidor."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -125,20 +128,37 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
 
             for rem in active_reminders:
                 rem_id = rem["id"]
-                interval_mins = rem["interval_minutes"]
-                last_sent_str = rem["last_reminded_at"]
+                guild_id = rem["guild_id"]
+                channel_id = rem["channel_id"]
+                assigned_user_id = rem["assigned_user_id"]
+                creator_id = rem["creator_id"]
+                title = rem["title"]
+                interval_minutes = rem["interval_minutes"]
+                send_dm = rem["send_dm"]
+                last_reminded_str = rem["last_reminded_at"]
 
+                # Parsear última fecha de recordatorio
                 try:
-                    last_dt = datetime.fromisoformat(last_sent_str)
-                    if last_dt.tzinfo is None:
-                        last_dt = last_dt.replace(tzinfo=timezone.utc)
+                    last_reminded_dt = datetime.fromisoformat(last_reminded_str)
+                    if last_reminded_dt.tzinfo is None:
+                        last_reminded_dt = last_reminded_dt.replace(tzinfo=timezone.utc)
                 except Exception:
-                    last_dt = now_dt
+                    last_reminded_dt = now_dt
 
-                elapsed_seconds = (now_dt - last_dt).total_seconds()
-                if elapsed_seconds >= (interval_mins * 60):
-                    # Hora de enviar el recordatorio!
-                    await self.dispatch_periodic_alert(rem)
+                elapsed_seconds = (now_dt - last_reminded_dt).total_seconds()
+                required_seconds = interval_minutes * 60
+
+                if elapsed_seconds >= required_seconds:
+                    await self.send_periodic_notification(
+                        rem_id=rem_id,
+                        guild_id=guild_id,
+                        channel_id=channel_id,
+                        assigned_user_id=assigned_user_id,
+                        creator_id=creator_id,
+                        title=title,
+                        interval_minutes=interval_minutes,
+                        send_dm=bool(send_dm)
+                    )
         except Exception as e:
             logger.error(f"Error en reminder_check_loop: {e}", exc_info=True)
 
@@ -146,146 +166,74 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
     async def before_reminder_loop(self):
         await self.bot.wait_until_ready()
 
-    async def dispatch_periodic_alert(self, rem: dict):
-        """Construye y envía el mensaje de recordatorio periódico."""
-        rem_id = rem["id"]
-        guild = self.bot.get_guild(rem["guild_id"])
+    async def send_periodic_notification(
+        self,
+        rem_id: int,
+        guild_id: int,
+        channel_id: int,
+        assigned_user_id: int,
+        creator_id: int,
+        title: str,
+        interval_minutes: int,
+        send_dm: bool = False
+    ):
+        """Envía el mensaje de recordatorio periódico en el canal y opcionalmente por DM."""
+        guild = self.bot.get_guild(guild_id)
         if not guild:
             return
 
-        channel = guild.get_channel(rem["channel_id"])
-        assigned_user = guild.get_member(rem["assigned_user_id"]) or await self.bot.fetch_user(rem["assigned_user_id"])
-        creator = guild.get_member(rem["creator_id"]) or await self.bot.fetch_user(rem["creator_id"])
+        channel = guild.get_channel(channel_id)
+        assigned_user = guild.get_member(assigned_user_id) or await self.bot.fetch_user(assigned_user_id)
+        if not assigned_user:
+            return
 
-        interval_text = format_interval(rem["interval_minutes"])
+        interval_text = format_interval(interval_minutes)
 
         embed = discord.Embed(
-            title="⏰ Recordatorio de Tarea Pendiente — MiniJefe",
+            title="⏰ Recordatorio de Tarea Pendiente",
             description=(
-                f"👋 {assigned_user.mention}, tienes una tarea asignada que requiere tu atención:\n\n"
-                f"📌 **{rem['title']}**\n\n"
-                f"👤 **Asignado por:** {creator.mention}\n"
-                f"🔄 **Frecuencia:** Cada **{interval_text}** hasta que la completes."
+                f"Hola {assigned_user.mention}, tienes una tarea activa en **{guild.name}**:\n\n"
+                f"📌 **Tarea:** {title}\n"
+                f"🔄 **Frecuencia:** Cada **{interval_text}**\n"
+                f"✍️ **Asignada por:** <@{creator_id}>\n\n"
+                f"Cuando termines, pulsa el botón **`[✅ Marcar como Listo]`** para confirmar su finalización."
             ),
             color=COLOR_WARNING
         )
-        embed.set_footer(text=f"ID de Tarea: #{rem_id} • Pulsa el botón cuando hayas terminado.")
+        embed.set_footer(text=f"ID de Tarea: #{rem_id} • Servidor: {guild.name}")
 
-        view = PeriodicReminderActionView(
-            reminder_id=rem_id,
-            assigned_user_id=rem["assigned_user_id"],
-            creator_id=rem["creator_id"]
-        )
+        view = PeriodicReminderActionView(reminder_id=rem_id, assigned_user_id=assigned_user_id, creator_id=creator_id)
 
         sent = False
-        if channel and channel.permissions_for(guild.me).send_messages:
+        if channel and isinstance(channel, discord.TextChannel):
             try:
                 await channel.send(
-                    content=f"🔔 {assigned_user.mention} ¡Recordatorio de tarea pendiente!",
+                    content=f"🔔 {assigned_user.mention} — Recordatorio de tu tarea pendiente:",
                     embed=embed,
                     view=view
                 )
                 sent = True
             except Exception as e:
-                logger.warning(f"No se pudo enviar recordatorio en #{channel.name}: {e}")
+                logger.warning(f"No se pudo enviar recordatorio en canal #{channel.name}: {e}")
 
-        # Enviar DM si está habilitado
-        if rem.get("send_dm") and assigned_user:
+        if send_dm and hasattr(assigned_user, "send"):
             try:
-                dm_view = PeriodicReminderActionView(rem_id, rem["assigned_user_id"], rem["creator_id"])
-                await assigned_user.send(embed=embed, view=dm_view)
+                dm_view = PeriodicReminderActionView(reminder_id=rem_id, assigned_user_id=assigned_user_id, creator_id=creator_id)
+                await assigned_user.send(
+                    content=f"🔔 Recordatorio de tu tarea en **{guild.name}**:",
+                    embed=embed,
+                    view=dm_view
+                )
+                sent = True
             except Exception:
                 pass
 
         if sent:
             now_iso = datetime.now(timezone.utc).isoformat()
             await update_periodic_reminder_sent(rem_id, now_iso)
-            logger.info(f"Recordatorio #{rem_id} enviado a {assigned_user} cada {interval_text}")
+            logger.info(f"Recordatorio #{rem_id} enviado a {assigned_user.display_name} cada {interval_text}")
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        """
-        Escucha instrucciones en lenguaje natural dirigidas al bot por Jordy (el Jefe) o Staff.
-        Ej: '@MiniJefe recuérdale a @usuario subir el informe cada 2 horas'
-        """
-        if message.author.bot or not message.guild:
-            return
-        if not self.bot.user or self.bot.user not in message.mentions:
-            return
-
-        member = message.author
-        if not is_boss_or_staff(member):
-            return
-
-        text = message.content.lower()
-
-        # Chequear si es una orden de recordar o poner tarea
-        keywords = ["recuerdale", "recuérdale", "recordar", "recuerda", "ponle una tarea", "asigna una tarea", "tarea para"]
-        if not any(k in text for k in keywords):
-            return
-
-        # Buscar usuario mencionado que NO sea el bot
-        target_members = [m for m in message.mentions if m.id != self.bot.user.id]
-        if not target_members:
-            # Si no mencionó a nadie, tal vez sea para sí mismo
-            target_user = message.author
-        else:
-            target_user = target_members[0]
-
-        # Extraer intervalo de tiempo: cada X horas / minutos
-        # Ejemplos: "cada 2 horas", "cada 30 min", "cada 1h", "cada 45 minutos", "cada hora"
-        interval_minutes = 120  # Por defecto 2 horas
-        match = re.search(r"cada\s+(\d+)\s*(hora|horas|h|minuto|minutos|min|m)", text)
-        if match:
-            val = int(match.group(1))
-            unit = match.group(2)
-            if "h" in unit:
-                interval_minutes = val * 60
-            else:
-                interval_minutes = max(val, 5)
-        elif "cada hora" in text or "cada 1 hora" in text:
-            interval_minutes = 60
-
-        # Extraer el texto de la tarea
-        clean_text = message.content
-        for m in message.mentions:
-            clean_text = clean_text.replace(f"<@{m.id}>", "").replace(f"<@!{m.id}>", "")
-        for k in ["recuerdale a", "recuérdale a", "recordarle a", "ponle una tarea a", "tarea para", "que haga", "que"]:
-            clean_text = re.sub(rf"(?i)\b{k}\b", "", clean_text)
-        # Quitar la parte de 'cada X horas'
-        clean_text = re.sub(r"(?i)cada\s+(\d+)?\s*(hora|horas|h|minuto|minutos|min|m)?", "", clean_text).strip()
-
-        task_title = clean_text if clean_text else "Tarea pendiente asignada por el staff"
-
-        rem_id = await add_periodic_reminder(
-            guild_id=message.guild.id,
-            channel_id=message.channel.id,
-            creator_id=message.author.id,
-            assigned_user_id=target_user.id,
-            title=task_title,
-            interval_minutes=interval_minutes,
-            send_dm=0
-        )
-
-        interval_display = format_interval(interval_minutes)
-        is_jordy = (message.author.id == JORDY_ID) or (message.guild and message.author.id == message.guild.owner_id)
-        reply_title = "🫡 ¡A la orden, Jefe Jordy! Recordatorio Registrado" if is_jordy else "🫡 ¡A la orden! Recordatorio Registrado"
-
-        embed = discord.Embed(
-            title=reply_title,
-            description=(
-                f"He registrado la tarea asignada por {message.author.mention}:\n\n"
-                f"📌 **Tarea:** {task_title}\n"
-                f"👤 **Asignada a:** {target_user.mention}\n"
-                f"🔄 **Frecuencia:** Cada **{interval_display}**\n\n"
-                f"*(Le estaré recordando periódicamente por este canal hasta que pulse 'Marcar como Listo').*"
-            ),
-            color=COLOR_SUCCESS
-        )
-        embed.set_footer(text=f"ID de Tarea: #{rem_id} • MiniJefe en acción")
-        await message.reply(embed=embed, mention_author=False)
-
-    @app_commands.command(name="recordar", description="Asigna una tarea o recordatorio periódico a un usuario con intervalo flexible")
+    @app_commands.command(name="recordar", description="Asigna una tarea o recordatorio periódico con intervalo flexible")
     @app_commands.describe(
         usuario="Usuario a quien se le asignará la tarea",
         tarea="Descripción de la tarea o pendiente",
@@ -301,10 +249,9 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
         por_md: Optional[bool] = False
     ):
         """Comando slash para delegar recordatorios periódicos."""
-        # Verificar permisos
         member = interaction.guild.get_member(interaction.user.id)
-        if usuario.id != interaction.user.id and not is_boss_or_staff(member):
-            await interaction.response.send_message("❌ Solo Jordy (el Jefe) o miembros del Staff pueden asignar tareas a otros usuarios.", ephemeral=True)
+        if usuario.id != interaction.user.id and not is_staff(member):
+            await interaction.response.send_message("❌ Solo miembros del Staff pueden asignar tareas a otros usuarios. Puedes asignarte tareas a ti mismo.", ephemeral=True)
             return
 
         interval_minutes = max(int(cada_horas * 60), 5)
@@ -322,84 +269,109 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
         dm_note = " (con avisos por Mensaje Directo)" if por_md else ""
 
         embed = discord.Embed(
-            title="✅ Recordatorio Periódico Registrado",
+            title="📋 Tarea Registrada Exitosamente",
             description=(
+                f"Se ha registrado la tarea en el sistema de **{interaction.guild.name}**:\n\n"
                 f"📌 **Tarea:** {tarea.strip()}\n"
                 f"👤 **Asignada a:** {usuario.mention}\n"
-                f"👑 **Asignada por:** {interaction.user.mention}\n"
-                f"⏰ **Frecuencia:** Cada **{interval_display}**{dm_note}"
+                f"🔄 **Frecuencia:** Cada **{interval_display}**{dm_note}\n\n"
+                f"*(Se notificarán avisos periódicos hasta que sea completada).*"
             ),
             color=COLOR_SUCCESS
         )
-        embed.set_footer(text=f"ID: #{rem_id} • El recordatorio se desactivará al marcar 'Listo'")
-        await interaction.response.send_message(embed=embed)
+        embed.set_footer(text=f"ID de Tarea: #{rem_id} • Servidor: {interaction.guild.name}")
+        view = PeriodicReminderActionView(reminder_id=rem_id, assigned_user_id=usuario.id, creator_id=interaction.user.id)
+        await interaction.response.send_message(embed=embed, view=view)
 
-    @app_commands.command(name="recordatorios-activos", description="Lista todos los recordatorios periódicos activos en este servidor")
-    async def list_active(self, interaction: discord.Interaction):
-        """Muestra los recordatorios periódicos activos."""
-        await interaction.response.defer()
-        active = await get_active_periodic_reminders(interaction.guild_id)
-
-        if not active:
-            await interaction.followup.send("✨ No hay recordatorios periódicos pendientes en este servidor. ¡Todo al día!")
+    @app_commands.command(name="recordatorios-activos", description="Muestra todas las tareas periódicas activas en el servidor")
+    async def slash_list_reminders(self, interaction: discord.Interaction):
+        """Consulta todos los recordatorios activos del servidor."""
+        reminders = await get_active_periodic_reminders(interaction.guild_id)
+        if not reminders:
+            await interaction.response.send_message("✨ **No hay recordatorios periódicos activos en este momento.** Todo se encuentra al día.", ephemeral=True)
             return
 
         embed = discord.Embed(
-            title="📋 Recordatorios Periódicos Activos",
-            description=f"Total activos: **{len(active)}**",
+            title=f"📋 Tareas y Recordatorios Activos — {interaction.guild.name}",
+            description=f"Hay **{len(reminders)}** tareas en seguimiento activo:",
             color=COLOR_INFO
         )
 
-        for rem in active[:10]:
-            target = f"<@{rem['assigned_user_id']}>"
-            creator = f"<@{rem['creator_id']}>"
-            freq = format_interval(rem["interval_minutes"])
-            embed.add_field(
-                name=f"#{rem['id']} • {rem['title'][:50]}",
-                value=f"👤 Para: {target} | 👑 De: {creator} | ⏰ Cada {freq}\nCanal: <#{rem['channel_id']}>",
-                inline=False
+        for rem in reminders[:15]:
+            interval_display = format_interval(rem["interval_minutes"])
+            dm_badge = " 📬 *(Avisos por DM)*" if rem["send_dm"] else ""
+            field_name = f"#{rem['id']} — {rem['title'][:80]}"
+            field_val = (
+                f"• **Asignada a:** <@{rem['assigned_user_id']}>\n"
+                f"• **Frecuencia:** Cada `{interval_display}`{dm_badge}\n"
+                f"• **Canal:** <#{rem['channel_id']}> | **Por:** <@{rem['creator_id']}>"
             )
+            embed.add_field(name=field_name, value=field_val, inline=False)
 
-        embed.set_footer(text="Para completar un recordatorio usa /tarea-lista [id]")
-        await interaction.followup.send(embed=embed)
+        embed.set_footer(text=f"Servidor: {interaction.guild.name} • Completa con /tarea-lista [id]")
+        await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="tarea-lista", description="Marca un recordatorio periódico como completado")
-    @app_commands.describe(id="ID del recordatorio a completar")
-    async def slash_complete(self, interaction: discord.Interaction, id: int):
+    @app_commands.command(name="tarea-lista", description="Marca una tarea periódica como completada y detiene los avisos")
+    @app_commands.describe(id="ID del recordatorio a completar (ej: 1, 2, 3)")
+    async def slash_complete_task(self, interaction: discord.Interaction, id: int):
         rem = await get_periodic_reminder(id)
-        if not rem or rem["guild_id"] != interaction.guild_id or rem["status"] != "active":
-            await interaction.response.send_message("❌ No se encontró ningún recordatorio activo con ese ID.", ephemeral=True)
+        if not rem or rem["guild_id"] != interaction.guild_id:
+            await interaction.response.send_message(f"❌ No se encontró ninguna tarea con el ID `#{id}` en este servidor.", ephemeral=True)
             return
 
         member = interaction.guild.get_member(interaction.user.id)
         is_authorized = (
             interaction.user.id == rem["assigned_user_id"] or
             interaction.user.id == rem["creator_id"] or
-            is_boss_or_staff(member)
+            (member and is_staff(member))
         )
 
         if not is_authorized:
-            await interaction.response.send_message("❌ No tienes permiso para completar esta tarea.", ephemeral=True)
+            await interaction.response.send_message("❌ No tienes permisos para completar esta tarea (solo la persona asignada, el creador o el Staff).", ephemeral=True)
             return
 
-        await complete_periodic_reminder(id)
-        await interaction.response.send_message(f"✅ ¡La tarea **#{id} ({rem['title']})** ha sido marcada como lista y desactivada!", ephemeral=False)
+        success = await complete_periodic_reminder(id)
+        if success:
+            embed = discord.Embed(
+                title="✅ Tarea Completada",
+                description=f"La tarea **#{id}** (*{rem['title']}*) fue marcada como completada por {interaction.user.mention}. Los recordatorios se han detenido.",
+                color=COLOR_SUCCESS
+            )
+            embed.set_footer(text=f"Servidor: {interaction.guild.name}")
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.response.send_message(f"⚠️ La tarea `#{id}` ya estaba completada o no se encontraba activa.", ephemeral=True)
 
-    @app_commands.command(name="tarea-cancelar", description="Cancela un recordatorio periódico")
+    @app_commands.command(name="tarea-cancelar", description="Cancela un recordatorio periódico activo")
     @app_commands.describe(id="ID del recordatorio a cancelar")
-    async def slash_cancel(self, interaction: discord.Interaction, id: int):
+    async def slash_cancel_task(self, interaction: discord.Interaction, id: int):
         rem = await get_periodic_reminder(id)
-        if not rem or rem["guild_id"] != interaction.guild_id or rem["status"] != "active":
-            await interaction.response.send_message("❌ No se encontró ningún recordatorio activo con ese ID.", ephemeral=True)
+        if not rem or rem["guild_id"] != interaction.guild_id:
+            await interaction.response.send_message(f"❌ No se encontró ninguna tarea con el ID `#{id}`.", ephemeral=True)
             return
 
         member = interaction.guild.get_member(interaction.user.id)
-        if not (interaction.user.id == rem["creator_id"] or is_boss_or_staff(member)):
-            await interaction.response.send_message("❌ Solo el creador o un jefe/admin pueden cancelar este recordatorio.", ephemeral=True)
+        is_authorized = (
+            interaction.user.id == rem["creator_id"] or
+            interaction.user.id == rem["assigned_user_id"] or
+            (member and is_staff(member))
+        )
+
+        if not is_authorized:
+            await interaction.response.send_message("❌ No tienes permisos para cancelar esta tarea.", ephemeral=True)
             return
 
-        await cancel_periodic_reminder(id)
-        await interaction.response.send_message(f"🛑 El recordatorio **#{id} ({rem['title']})** fue cancelado.", ephemeral=False)
+        success = await cancel_periodic_reminder(id)
+        if success:
+            embed = discord.Embed(
+                title="🛑 Recordatorio Cancelado",
+                description=f"El recordatorio **#{id}** (*{rem['title']}*) ha sido cancelado por {interaction.user.mention}.",
+                color=COLOR_DANGER
+            )
+            embed.set_footer(text=f"Servidor: {interaction.guild.name}")
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.response.send_message(f"⚠️ La tarea `#{id}` ya no estaba activa.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(PeriodicRemindersCog(bot))

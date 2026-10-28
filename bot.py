@@ -123,7 +123,7 @@ class TaskBot(commands.Bot):
         
         activity = discord.Activity(
             type=discord.ActivityType.watching,
-            name="la comunidad dev | Servidor de Jordy"
+            name="la comunidad dev | @MiniJefe o /hablar"
         )
         await self.change_presence(status=discord.Status.online, activity=activity)
 

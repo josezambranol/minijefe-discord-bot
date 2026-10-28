@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import logging
+import unicodedata
+import re
 from typing import Optional
 
 from database import get_guild_settings, update_guild_setting
@@ -11,6 +13,11 @@ from utils.embeds import COLOR_SUCCESS, COLOR_PRIMARY
 
 logger = logging.getLogger("MiniJefe.Welcome")
 
+def normalize_channel_name(name: str) -> str:
+    """Normaliza el nombre de un canal removiendo emojis, tildes y caracteres especiales."""
+    n = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('utf-8').lower()
+    return re.sub(r'[^a-z0-9]', '', n)
+
 class WelcomeCog(commands.Cog, name="Bienvenidas"):
     """Gestión de bienvenida para nuevos miembros con tarjetas gráficas de programación e IA."""
 
@@ -18,50 +25,72 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
         self.bot = bot
 
     async def get_welcome_channel(self, guild: discord.Guild) -> Optional[discord.TextChannel]:
-        """Encuentra el canal adecuado para enviar la bienvenida."""
-        settings = await get_guild_settings(guild.id)
-        channel_id = settings.get("welcome_channel_id")
-        if channel_id:
-            ch = guild.get_channel(channel_id)
-            if ch and isinstance(ch, discord.TextChannel):
-                return ch
+        """
+        Encuentra inteligentemente el mejor canal para enviar la bienvenida:
+        1. Canal configurado manualmente vía /config-bienvenida.
+        2. Canal del sistema si el bot tiene permisos de escritura.
+        3. Canales cuyo nombre contenga 'bienvenida', 'welcome', 'llegada', 'inicio', 'general', 'chat', 'comunidad'.
+        4. Cualquier canal de texto accesible por los miembros donde el bot pueda escribir.
+        """
+        # 1. Canal configurado explícitamente en base de datos
+        try:
+            settings = await get_guild_settings(guild.id)
+            channel_id = settings.get("welcome_channel_id")
+            if channel_id:
+                ch = guild.get_channel(channel_id)
+                if ch and isinstance(ch, discord.TextChannel) and ch.permissions_for(guild.me).send_messages:
+                    return ch
+        except Exception as e:
+            logger.warning(f"Error al consultar configuración de bienvenida: {e}")
 
-        # Buscar por nombres comunes
-        for name in ["bienvenida", "bienvenidas", "welcome", "llegadas", "general", "chat-general"]:
-            ch = discord.utils.get(guild.text_channels, name=name)
-            if ch:
-                return ch
-
-        # Usar el canal del sistema si existe
-        if guild.system_channel:
+        # 2. Canal del sistema de Discord
+        if guild.system_channel and guild.system_channel.permissions_for(guild.me).send_messages:
             return guild.system_channel
 
-        # Si no, el primer canal donde el bot pueda escribir
-        for ch in guild.text_channels:
-            if ch.permissions_for(guild.me).send_messages:
-                return ch
+        # Canales donde el bot tiene permiso de enviar mensajes y embeber enlaces
+        writable_channels = [
+            ch for ch in guild.text_channels
+            if ch.permissions_for(guild.me).send_messages
+        ]
 
-        return None
+        if not writable_channels:
+            return None
+
+        # 3. Búsqueda por palabras clave con prioridad
+        priority_groups = [
+            ["bienvenid", "welcome", "llegad", "hola"],
+            ["general", "chat", "principal", "comunidad", "charla", "conversacion"],
+            ["inicio", "presentacion", "presentate", "lobby", "start"]
+        ]
+
+        for keywords in priority_groups:
+            for ch in writable_channels:
+                clean = normalize_channel_name(ch.name)
+                if any(kw in clean for kw in keywords):
+                    return ch
+
+        # 4. Fallback al primer canal donde el bot pueda escribir
+        return writable_channels[0]
 
     def create_welcome_embed(self, member: discord.Member, quote: str) -> discord.Embed:
-        """Crea el embed estético para la bienvenida."""
+        """Crea el embed estético y profesional para la bienvenida."""
         embed = discord.Embed(
-            title="👋 ¡Pónganse de pie! Ha llegado un nuevo desarrollador",
+            title="👋 ¡Bienvenido/a a la comunidad!",
             description=(
-                f"Le damos una cálida bienvenida a {member.mention} a **{member.guild.name}**.\n\n"
-                f"💬 **Mensaje de MiniJefe:**\n> *\"{quote}\"*\n\n"
-                f"✨ **Primeros pasos sugeridos:**\n"
-                f"• Pasa por **#roles** para seleccionar tus tecnologías y especialidad.\n"
-                f"• Preséntate en **#presentaciones** para que la comunidad te conozca.\n"
-                f"• Revisa las **#reglas** y comparte tus proyectos en **#proyectos-colaboracion**.\n"
-                f"• Si quieres charlar o necesitas ayuda con código, ¡mencióname con `@{self.bot.user.name}` o usa `/hablar`!"
+                f"Le damos una cordial bienvenida a {member.mention} a **{member.guild.name}**.\n\n"
+                f"💬 **Mensaje de Bienvenida:**\n> *\"{quote}\"*\n\n"
+                f"✨ **Ruta inicial recomendada:**\n"
+                f"• Selecciona tus tecnologías en **#roles**.\n"
+                f"• Preséntate ante el equipo en **#presentaciones**.\n"
+                f"• Revisa las directrices en **#reglas** y comparte tus ideas en **#proyectos-colaboracion**.\n"
+                f"• Si requieres asistencia técnica o deseas registrar tareas, mencióname con `@{self.bot.user.name}` o usa `/hablar`."
             ),
             color=COLOR_PRIMARY
         )
         embed.set_thumbnail(url=member.display_avatar.url)
         embed.set_image(url="attachment://welcome_card.png")
         embed.set_footer(
-            text=f"Miembro #{member.guild.member_count} • Servidor de Jordy • ¡Ponte cómodo y a codear!",
+            text=f"Miembro #{member.guild.member_count} • Comunidad de {member.guild.name} • ¡Mucho éxito en tus proyectos!",
             icon_url=member.guild.icon.url if member.guild.icon else None
         )
         return embed
@@ -72,12 +101,14 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
         if member.bot:
             return
 
+        logger.info(f"Nuevo integrante detectado: {member.display_name} ({member.id}) en '{member.guild.name}'")
+
         channel = await self.get_welcome_channel(member.guild)
         if not channel:
-            logger.warning(f"No se encontró un canal adecuado de bienvenida en {member.guild.name}")
+            logger.warning(f"No se encontró ningún canal con permisos de escritura en {member.guild.name}")
             return
 
-        # 1. Frase de bienvenida con IA
+        # 1. Generar cita de bienvenida con IA en tono profesional
         quote = await generate_welcome_quote(member.display_name, member.guild.name)
         embed = self.create_welcome_embed(member, quote)
 
@@ -91,20 +122,24 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
             )
             file = discord.File(card_buf, filename="welcome_card.png")
             await channel.send(
-                content=f"🎉 ¡Hey {member.mention}, bienvenido/a a la comunidad dev!",
+                content=f"🎉 ¡Bienvenido/a {member.mention} a la comunidad de **{member.guild.name}**!",
                 embed=embed,
                 file=file
             )
-            logger.info(f"Bienvenida con tarjeta gráfica enviada a {member.display_name} en #{channel.name}")
+            logger.info(f"Bienvenida con tarjeta gráfica enviada exitosamente a {member.display_name} en #{channel.name}")
         except Exception as e:
-            logger.error(f"Error al enviar tarjeta gráfica de bienvenida a {member.display_name}: {e}", exc_info=True)
-            # Fallback a enviar solo el embed si la imagen falla
+            logger.error(f"Error generando tarjeta gráfica de bienvenida para {member.display_name}: {e}", exc_info=True)
+            # Fallback seguro: enviar el embed sin archivo si Pillow o la red falla
             try:
-                await channel.send(content=f"🎉 ¡Hey {member.mention}, bienvenido/a!", embed=embed)
-            except Exception:
-                pass
+                embed.set_image(url=None)
+                await channel.send(
+                    content=f"🎉 ¡Bienvenido/a {member.mention} a la comunidad de **{member.guild.name}**!",
+                    embed=embed
+                )
+            except Exception as e2:
+                logger.error(f"Error al enviar mensaje de bienvenida en fallback: {e2}")
 
-    @app_commands.command(name="config-bienvenida", description="Configura el canal oficial de bienvenidas")
+    @app_commands.command(name="config-bienvenida", description="Configura el canal oficial de bienvenidas del servidor")
     @app_commands.describe(canal="Canal donde MiniJefe saludará a los nuevos miembros")
     @app_commands.default_permissions(administrator=True)
     async def config_welcome_channel(self, interaction: discord.Interaction, canal: discord.TextChannel):
@@ -112,7 +147,7 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
         await update_guild_setting(interaction.guild_id, "welcome_channel_id", canal.id)
         embed = discord.Embed(
             title="✅ Canal de Bienvenida Configurado",
-            description=f"A partir de ahora, recibiré a cada nuevo integrante en {canal.mention} con su tarjeta gráfica y saludo con IA.",
+            description=f"A partir de ahora, recibiré a cada nuevo integrante en {canal.mention} con su tarjeta gráfica y bienvenida personalizada.",
             color=COLOR_SUCCESS
         )
         await interaction.response.send_message(embed=embed)
@@ -140,6 +175,7 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
             )
         except Exception as e:
             logger.error(f"Error al generar previsualización de bienvenida: {e}", exc_info=True)
+            embed.set_image(url=None)
             await interaction.followup.send(
                 content=f"🧪 *(Prueba de Bienvenida)* 🎉 ¡Bienvenido/a {interaction.user.mention}!",
                 embed=embed

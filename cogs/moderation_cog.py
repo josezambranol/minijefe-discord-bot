@@ -63,13 +63,13 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
                     try:
                         await message.delete()
                         deleted = await message.channel.purge(limit=count)
-                        confirm = await message.channel.send(f"🧹 ¡A la orden jefe! Se eliminaron **{len(deleted)} mensajes**.")
+                        confirm = await message.channel.send(f"🧹 Se han eliminado **{len(deleted)} mensajes** correctamente.")
                         await confirm.delete(delay=4)
                         return
                     except Exception as e:
                         logger.warning(f"Error al purgar mensajes por chat: {e}")
                 else:
-                    await message.reply("❌ Necesito el permiso de **Gestionar Mensajes** (`Manage Messages`) para poder borrar mensajes de otros usuarios.", mention_author=False)
+                    await message.reply("❌ Se requiere el permiso de **Gestionar Mensajes** (`Manage Messages`) para eliminar mensajes.", mention_author=False)
                     return
 
         if self.is_exempt(message):
@@ -100,8 +100,7 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
                     message,
                     reason="flood",
                     friendly_text=(
-                        f"¡Epa, {message.author.mention}! 🛑 Frena un toque los caballos 🐎\n"
-                        f"El Mini Jefe no lee a la velocidad de la luz. Tómate un respiro de unos segundos para que todos puedan leer el chat con calma."
+                        f"Atención, {message.author.mention}: Por favor modera la frecuencia de mensajes para mantener el canal ordenado."
                     ),
                     delete_trigger=True
                 )
@@ -115,8 +114,7 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
                     message,
                     reason="duplicate",
                     friendly_text=(
-                        f"Hey {message.author.mention} 😉 ¡Ya te leímos a la primera!\n"
-                        f"No hace falta hacer eco en el canal, te prometo que el mensaje llegó claro y fuerte."
+                        f"Atención, {message.author.mention}: Por favor evita enviar mensajes duplicados repetidamente en el canal."
                     ),
                     delete_trigger=True
                 )

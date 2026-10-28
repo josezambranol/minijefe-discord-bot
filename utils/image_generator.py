@@ -60,7 +60,7 @@ def generate_welcome_card_sync(
         "// Inicializando entorno de desarrollo...",
         "import { Developer, Team, Vision } from '@community/core';",
         "const member = new Developer({ status: 'ready_to_build' });",
-        "await community.register(member, { mentor: 'Jordy (Jefe)' });",
+        "await community.register(member, { role: 'Developer' });",
         "console.log('[MiniJefe]: ¡Nuevo talento detectado!');",
         "const stack = ['Java', 'Python', 'TypeScript', 'Docker', 'PostgreSQL'];",
         "while (passion > 0) { learn(); build(); collaborate(); }",
