@@ -285,20 +285,6 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
         except Exception as e:
             logger.warning(f"Error al enviar log de spam a #reportes: {e}")
 
-    @app_commands.command(name="config-antispam", description="Activa o desactiva la protección automática contra spam")
-    @app_commands.describe(activar="True para activar la protección, False para desactivarla")
-    @app_commands.default_permissions(administrator=True)
-    async def toggle_antispam(self, interaction: discord.Interaction, activar: bool):
-        val = 1 if activar else 0
-        await update_guild_setting(interaction.guild_id, "spam_shield_enabled", val)
-        status_text = "ACTIVADO 🛡️" if activar else "DESACTIVADO 💤"
-        embed = discord.Embed(
-            title="🛡️ Escudo Anti-Spam",
-            description=f"El sistema de detección y mitigación de spam ha sido: **{status_text}**.",
-            color=COLOR_SUCCESS if activar else COLOR_WARNING
-        )
-        await interaction.response.send_message(embed=embed)
-
     @app_commands.command(
         name="limpiar",
         description="Elimina mensajes con filtros avanzados (canal, usuario, fecha/días, spam o bots)"
@@ -426,33 +412,6 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
         except Exception as e:
             logger.error(f"Error ejecutando /limpiar: {e}", exc_info=True)
             await interaction.followup.send(f"❌ Ocurrió un error al eliminar los mensajes: {e}", ephemeral=True)
-
-    @app_commands.command(
-        name="limpiar-spam",
-        description="Elimina ráfagas de spam, enlaces y mensajes sospechosos en cualquier canal"
-    )
-    @app_commands.describe(
-        canal="Opcional: Canal donde se limpiará el spam (por defecto este canal)",
-        cantidad="Cantidad de mensajes a escanear (por defecto 50)"
-    )
-    @app_commands.default_permissions(manage_messages=True)
-    async def purge_spam_direct(
-        self,
-        interaction: discord.Interaction,
-        canal: Optional[discord.TextChannel] = None,
-        cantidad: app_commands.Range[int, 1, 100] = 50
-    ):
-        """Atajo directo para limpiar spam en cualquier canal."""
-        await self.purge_messages.callback(
-            self,
-            interaction=interaction,
-            cantidad=cantidad,
-            canal=canal,
-            usuario=None,
-            dias=None,
-            solo_spam=True,
-            solo_bots=False
-        )
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ModerationCog(bot))

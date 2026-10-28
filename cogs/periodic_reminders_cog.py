@@ -363,70 +363,8 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
             )
             embed.add_field(name=field_name, value=field_val, inline=False)
 
-        embed.set_footer(text=f"Servidor: {interaction.guild.name} • Completa con /tarea-lista [id]")
+        embed.set_footer(text=f"Servidor: {interaction.guild.name} • Usa los botones del recordatorio para completarlo")
         await interaction.response.send_message(embed=embed)
-
-    @app_commands.command(name="tarea-lista", description="Marca una tarea periódica como completada y detiene los avisos")
-    @app_commands.describe(id="ID del recordatorio a completar (ej: 1, 2, 3)")
-    async def slash_complete_task(self, interaction: discord.Interaction, id: int):
-        rem = await get_periodic_reminder(id)
-        if not rem or rem["guild_id"] != interaction.guild_id:
-            await interaction.response.send_message(f"❌ No se encontró ninguna tarea con el ID `#{id}` en este servidor.", ephemeral=True)
-            return
-
-        member = interaction.guild.get_member(interaction.user.id)
-        is_authorized = (
-            interaction.user.id == rem["assigned_user_id"] or
-            interaction.user.id == rem["creator_id"] or
-            (member and is_staff(member))
-        )
-
-        if not is_authorized:
-            await interaction.response.send_message("❌ No tienes permisos para completar esta tarea (solo la persona asignada, el creador o el Staff).", ephemeral=True)
-            return
-
-        success = await complete_periodic_reminder(id)
-        if success:
-            embed = discord.Embed(
-                title="✅ Tarea Completada",
-                description=f"La tarea **#{id}** (*{rem['title']}*) fue marcada como completada por {interaction.user.mention}. Los recordatorios se han detenido.",
-                color=COLOR_SUCCESS
-            )
-            embed.set_footer(text=f"Servidor: {interaction.guild.name}")
-            await interaction.response.send_message(embed=embed)
-        else:
-            await interaction.response.send_message(f"⚠️ La tarea `#{id}` ya estaba completada o no se encontraba activa.", ephemeral=True)
-
-    @app_commands.command(name="tarea-cancelar", description="Cancela un recordatorio periódico activo")
-    @app_commands.describe(id="ID del recordatorio a cancelar")
-    async def slash_cancel_task(self, interaction: discord.Interaction, id: int):
-        rem = await get_periodic_reminder(id)
-        if not rem or rem["guild_id"] != interaction.guild_id:
-            await interaction.response.send_message(f"❌ No se encontró ninguna tarea con el ID `#{id}`.", ephemeral=True)
-            return
-
-        member = interaction.guild.get_member(interaction.user.id)
-        is_authorized = (
-            interaction.user.id == rem["creator_id"] or
-            interaction.user.id == rem["assigned_user_id"] or
-            (member and is_staff(member))
-        )
-
-        if not is_authorized:
-            await interaction.response.send_message("❌ No tienes permisos para cancelar esta tarea.", ephemeral=True)
-            return
-
-        success = await cancel_periodic_reminder(id)
-        if success:
-            embed = discord.Embed(
-                title="🛑 Recordatorio Cancelado",
-                description=f"El recordatorio **#{id}** (*{rem['title']}*) ha sido cancelado por {interaction.user.mention}.",
-                color=COLOR_DANGER
-            )
-            embed.set_footer(text=f"Servidor: {interaction.guild.name}")
-            await interaction.response.send_message(embed=embed)
-        else:
-            await interaction.response.send_message(f"⚠️ La tarea `#{id}` ya no estaba activa.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(PeriodicRemindersCog(bot))

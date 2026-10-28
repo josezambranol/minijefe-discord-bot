@@ -357,60 +357,6 @@ class RolesCog(commands.Cog, name="Roles"):
         except Exception as e:
             logger.warning(f"Error en auto-regeneración del panel de roles: {e}")
 
-    @app_commands.command(name="panel-roles", description="Limpia mensajes antiguos y publica el panel actualizado de roles")
-    @app_commands.describe(canal="Canal donde se publicará el panel (por defecto el canal de roles o el actual)")
-    @app_commands.default_permissions(administrator=True)
-    async def slash_panel_roles(self, interaction: discord.Interaction, canal: Optional[discord.TextChannel] = None):
-        """Publica el panel interactivo de auto-asignación de roles borrando los anteriores."""
-        await interaction.response.defer(ephemeral=True)
-        target_channel = canal or interaction.channel
-        if not isinstance(target_channel, discord.TextChannel):
-            await interaction.followup.send("Debes especificar un canal de texto válido.", ephemeral=True)
-            return
-
-        try:
-            await deploy_clean_roles_panel(target_channel)
-            await interaction.followup.send(
-                f"Panel de roles actualizado y publicado en {target_channel.mention}.",
-                ephemeral=True
-            )
-        except discord.Forbidden:
-            await interaction.followup.send(
-                f"No tengo permisos para gestionar o enviar mensajes en {target_channel.mention}.",
-                ephemeral=True
-            )
-        except Exception as e:
-            await interaction.followup.send(f"Error al publicar el panel de roles: {e}", ephemeral=True)
-
-    @app_commands.command(name="crear-roles-default", description="Verifica y crea automáticamente los roles técnicos del servidor")
-    @app_commands.default_permissions(administrator=True)
-    async def slash_create_default_roles(self, interaction: discord.Interaction):
-        """Crea en Discord todos los roles gestionados si aún no existen."""
-        await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        if not guild:
-            await interaction.followup.send("Servidor no encontrado.", ephemeral=True)
-            return
-
-        created = await ensure_all_managed_roles(guild)
-        created_str = ", ".join([f"`{n}`" for n in created]) if created else "Ninguno (todos ya estaban creados)"
-
-        await interaction.followup.send(
-            f"**Verificación de roles completada:**\n"
-            f"Roles nuevos creados ({len(created)}): {created_str}",
-            ephemeral=True
-        )
-
-        try:
-            await log_to_reports(
-                guild=guild,
-                title="Verificación de Roles Técnicos",
-                description=f"Se verificaron los roles del servidor ({len(created)} nuevos creados).",
-                action_type="roles",
-                user=interaction.user
-            )
-        except Exception:
-            pass
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(RolesCog(bot))

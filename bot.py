@@ -84,8 +84,6 @@ class TaskBot(commands.Bot):
             "cogs.roles_cog",
             "cogs.community_cog",
             "cogs.moderation_cog",
-            "cogs.daily_plans_cog",
-            "cogs.admin_cog",
             "cogs.reports_cog"
         ]
 
@@ -124,7 +122,7 @@ class TaskBot(commands.Bot):
         
         activity = discord.Activity(
             type=discord.ActivityType.watching,
-            name="la comunidad dev | @MiniJefe o /hablar"
+            name="la comunidad dev | @MiniJefe"
         )
         await self.change_presence(status=discord.Status.online, activity=activity)
 

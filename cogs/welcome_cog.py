@@ -171,34 +171,43 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
         except Exception as e:
             logger.warning(f"Error registrando bienvenida en #reportes: {e}")
 
-    @app_commands.command(name="config-bienvenida", description="Configura el canal oficial de bienvenidas del servidor")
-    @app_commands.describe(canal="Canal donde MiniJefe saludará a los nuevos miembros")
+    @app_commands.command(name="simular", description="Envía un mensaje de simulación (bienvenida, reglas, roles o reporte) para previsualización")
+    @app_commands.describe(tipo="Elemento a simular: bienvenida, reglas, roles o reporte")
+    @app_commands.choices(tipo=[
+        app_commands.Choice(name="Bienvenida con tarjeta gráfica", value="bienvenida"),
+        app_commands.Choice(name="Reglas simplificadas (1 línea)", value="reglas"),
+        app_commands.Choice(name="Panel de Roles Técnicos", value="roles"),
+        app_commands.Choice(name="Reporte Diario Autónomo", value="reporte")
+    ])
     @app_commands.default_permissions(administrator=True)
-    async def config_welcome_channel(self, interaction: discord.Interaction, canal: discord.TextChannel):
-        """Comando para que administradores definan el canal de bienvenida."""
-        await update_guild_setting(interaction.guild_id, "welcome_channel_id", canal.id)
-        embed = discord.Embed(
-            title="✅ Canal de Bienvenida Configurado",
-            description=f"A partir de ahora, recibiré a cada nuevo integrante en {canal.mention} con su tarjeta gráfica y bienvenida personalizada.",
-            color=COLOR_SUCCESS
-        )
-        await interaction.response.send_message(embed=embed)
-        try:
-            await log_to_reports(
-                guild=interaction.guild,
-                title="Canal de Bienvenidas Configurado",
-                description=f"Se asignó {canal.mention} como canal oficial de bienvenidas.",
-                action_type="config",
-                user=interaction.user
-            )
-        except Exception as e:
-            pass
+    async def simulate_message(self, interaction: discord.Interaction, tipo: Optional[str] = "bienvenida"):
+        """Comando único para simular cualquier vista principal del servidor."""
+        await interaction.response.defer(ephemeral=True)
+        choice = (tipo or "bienvenida").lower()
 
-    @app_commands.command(name="probar-bienvenida", description="Simula un mensaje de bienvenida con tarjeta gráfica para previsualizarlo")
-    @app_commands.default_permissions(administrator=True)
-    async def test_welcome(self, interaction: discord.Interaction):
-        """Comando para previsualizar la tarjeta gráfica y el mensaje de bienvenida."""
-        await interaction.response.defer(ephemeral=False)
+        if choice == "reglas":
+            from utils.embeds import create_server_rules_embeds
+            for emb in create_server_rules_embeds():
+                await interaction.followup.send(content="**[Simulación — Reglas del Servidor]**", embed=emb, ephemeral=True)
+            return
+
+        if choice == "roles":
+            from utils.embeds import create_roles_panel_embed
+            from cogs.roles_cog import RolesPanelView
+            await interaction.followup.send(
+                content="**[Simulación — Panel de Roles]**",
+                embed=create_roles_panel_embed(),
+                view=RolesPanelView(),
+                ephemeral=True
+            )
+            return
+
+        if choice == "reporte":
+            from utils.reporting import build_daily_autonomous_report_embed
+            emb = await build_daily_autonomous_report_embed(interaction.guild, self.bot)
+            await interaction.followup.send(content="**[Simulación — Reporte Diario Autónomo]**", embed=emb, ephemeral=True)
+            return
+
         quote = await generate_welcome_quote(interaction.user.display_name, interaction.guild.name)
         embed = self.create_welcome_embed(interaction.user, quote)
 
@@ -211,16 +220,18 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
             )
             file = discord.File(card_buf, filename="welcome_card.png")
             await interaction.followup.send(
-                content=f"🧪 *(Prueba de Bienvenida)* 🎉 ¡Bienvenido/a {interaction.user.mention}!",
+                content=f"**[Simulación — Bienvenida]** Bienvenido/a {interaction.user.mention} a **{interaction.guild.name}**.",
                 embed=embed,
-                file=file
+                file=file,
+                ephemeral=True
             )
         except Exception as e:
-            logger.error(f"Error al generar previsualización de bienvenida: {e}", exc_info=True)
+            logger.error(f"Error al generar simulación de bienvenida: {e}", exc_info=True)
             embed.set_image(url=None)
             await interaction.followup.send(
-                content=f"🧪 *(Prueba de Bienvenida)* 🎉 ¡Bienvenido/a {interaction.user.mention}!",
-                embed=embed
+                content=f"**[Simulación — Bienvenida]** Bienvenido/a {interaction.user.mention} a **{interaction.guild.name}**.",
+                embed=embed,
+                ephemeral=True
             )
 
 async def setup(bot: commands.Bot):

@@ -112,14 +112,14 @@ class CommunityCog(commands.Cog, name="Comunidad y Recursos"):
         self._startup_polish_done = True
 
         for guild in self.bot.guilds:
-            notif_key = f"server_polish_v4_short_rules_{guild.id}"
+            notif_key = f"server_polish_v6_ceo_voice_{guild.id}"
             if await has_notification_been_sent(notif_key):
                 continue
             try:
-                logger.info(f"Aplicando optimización y actualización de contenidos en '{guild.name}'...")
+                logger.info(f"Aplicando optimización, canales CEO y actualización en '{guild.name}'...")
                 await self.execute_server_polish(guild)
                 await record_notification_sent(notif_key)
-                logger.info(f"Optimización v3 completada exitosamente en '{guild.name}'.")
+                logger.info(f"Optimización v6 completada exitosamente en '{guild.name}'.")
             except Exception as e:
                 logger.error(f"Error aplicando optimización automática en '{guild.name}': {e}", exc_info=True)
 
@@ -289,6 +289,122 @@ class CommunityCog(commands.Cog, name="Comunidad y Recursos"):
                 pass
             report_lines.append(f"- Canal de auditoría {ch_reportes.mention} configurado como privado para Administración")
 
+        # -------------------------------------------------------------
+        # 7. CANALES DE VOZ PRIVADOS PARA CEO (JORDY Y RANGO CEO)
+        # -------------------------------------------------------------
+        # 7.1 Buscar o crear rol 'CEO'
+        ceo_role = discord.utils.find(lambda r: r.name.lower() == "ceo", guild.roles)
+        if not ceo_role and guild.me.guild_permissions.manage_roles:
+            try:
+                ceo_role = await guild.create_role(
+                    name="CEO",
+                    color=discord.Color(0xD4AF37),
+                    hoist=True,
+                    mentionable=False,
+                    reason="Rol para dirección ejecutiva y canales privados"
+                )
+                report_lines.append(f"- Creado rol ejecutivo `{ceo_role.name}`")
+            except Exception as e:
+                logger.warning(f"No se pudo crear rol CEO: {e}")
+
+        # 7.2 Localizar a Jordy si está en el servidor
+        jordy_member = None
+        for m in guild.members:
+            if "jordy" in m.name.lower() or "jordy" in m.display_name.lower():
+                jordy_member = m
+                break
+        if not jordy_member and guild.owner:
+            jordy_member = guild.owner
+
+        if jordy_member and ceo_role and ceo_role not in jordy_member.roles:
+            try:
+                if guild.me.guild_permissions.manage_roles and ceo_role < guild.me.top_role:
+                    await jordy_member.add_roles(ceo_role, reason="Asignación de rol CEO")
+                    report_lines.append(f"- Rol `{ceo_role.name}` asignado a {jordy_member.mention}")
+            except Exception:
+                pass
+
+        # 7.3 Permisos privados: ocultos para @everyone, visibles y conectables para CEO y Jordy
+        ceo_overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False),
+            guild.me: discord.PermissionOverwrite(view_channel=True, connect=True, manage_channels=True)
+        }
+        if ceo_role:
+            ceo_overwrites[ceo_role] = discord.PermissionOverwrite(
+                view_channel=True,
+                connect=True,
+                speak=True,
+                stream=True
+            )
+        if jordy_member:
+            ceo_overwrites[jordy_member] = discord.PermissionOverwrite(
+                view_channel=True,
+                connect=True,
+                speak=True,
+                stream=True
+            )
+
+        # 7.4 Categoría privada DIRECCIÓN
+        cat_staff = find_category_smart(guild, ["direccion", "staff", "admin", "ejecutivo", "gerencia"])
+        if not cat_staff and guild.me.guild_permissions.manage_channels:
+            try:
+                cat_staff = await guild.create_category(
+                    name="DIRECCIÓN",
+                    overwrites=ceo_overwrites,
+                    reason="Categoría privada para rango CEO y dirección"
+                )
+                report_lines.append(f"- Creada categoría privada `{cat_staff.name}`")
+            except Exception:
+                cat_staff = None
+
+        # 7.5 Canal de voz 1: Máximo 5 personas
+        v5_name = "Reunión CEO"
+        v5_channel = discord.utils.find(
+            lambda c: isinstance(c, discord.VoiceChannel) and ("reunion ceo" in c.name.lower() or "ceo (5" in c.name.lower() or c.name == v5_name),
+            guild.voice_channels
+        )
+        if not v5_channel and guild.me.guild_permissions.manage_channels:
+            try:
+                v5_channel = await guild.create_voice_channel(
+                    name=v5_name,
+                    category=cat_staff,
+                    user_limit=5,
+                    overwrites=ceo_overwrites,
+                    reason="Canal de voz privado para CEOs (máximo 5 personas)"
+                )
+                report_lines.append(f"- Creado canal de voz privado `{v5_channel.name}` (límite: 5 personas, solo rango CEO)")
+            except Exception as e:
+                logger.warning(f"Error creando canal de voz 5p: {e}")
+        elif v5_channel:
+            try:
+                await v5_channel.edit(user_limit=5, overwrites=ceo_overwrites, category=cat_staff or v5_channel.category)
+            except Exception:
+                pass
+
+        # 7.6 Canal de voz 2: Máximo 2 personas
+        v2_name = "Despacho CEO"
+        v2_channel = discord.utils.find(
+            lambda c: isinstance(c, discord.VoiceChannel) and ("despacho ceo" in c.name.lower() or "ceo (2" in c.name.lower() or c.name == v2_name),
+            guild.voice_channels
+        )
+        if not v2_channel and guild.me.guild_permissions.manage_channels:
+            try:
+                v2_channel = await guild.create_voice_channel(
+                    name=v2_name,
+                    category=cat_staff,
+                    user_limit=2,
+                    overwrites=ceo_overwrites,
+                    reason="Canal de voz privado para CEOs (máximo 2 personas)"
+                )
+                report_lines.append(f"- Creado canal de voz privado `{v2_channel.name}` (límite: 2 personas, solo rango CEO)")
+            except Exception as e:
+                logger.warning(f"Error creando canal de voz 2p: {e}")
+        elif v2_channel:
+            try:
+                await v2_channel.edit(user_limit=2, overwrites=ceo_overwrites, category=cat_staff or v2_channel.category)
+            except Exception:
+                pass
+
         # Registrar en #reportes
         try:
             await log_to_reports(
@@ -302,131 +418,6 @@ class CommunityCog(commands.Cog, name="Comunidad y Recursos"):
             logger.warning(f"Error registrando pulido en #reportes: {e}")
 
         return report_lines
-
-    @app_commands.command(
-        name="pulir-servidor",
-        description="Limpia mensajes antiguos, restaura roles, publica reglas extensas y optimiza canales (95% dev)"
-    )
-    @app_commands.default_permissions(administrator=True)
-    async def slash_polish_server(self, interaction: discord.Interaction):
-        """Comando directo para ejecutar el pulido integral del servidor."""
-        if not interaction.guild:
-            await interaction.response.send_message("Servidor no encontrado.", ephemeral=True)
-            return
-
-        await interaction.response.defer(ephemeral=True)
-        lines = await self.execute_server_polish(interaction.guild, executor=interaction.user)
-
-        embed = discord.Embed(
-            title="Servidor Actualizado y Optimizado",
-            description=(
-                f"Se aplicaron las mejoras de estructura y contenido en **{interaction.guild.name}**:\n\n" +
-                "\n".join(lines)
-            ),
-            color=COLOR_DARK
-        )
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @app_commands.command(
-        name="aplicar-en-canales-reales",
-        description="Actualiza reglas, roles, bienvenida y plantillas en los canales del servidor borrando lo viejo"
-    )
-    @app_commands.default_permissions(administrator=True)
-    async def apply_to_real_channels(self, interaction: discord.Interaction):
-        """Alias de pulir-servidor para mantener compatibilidad."""
-        await self.slash_polish_server.callback(self, interaction)
-
-    @app_commands.command(
-        name="limpiar-duplicados",
-        description="Elimina las categorías y canales duplicados o redundantes del servidor"
-    )
-    @app_commands.default_permissions(administrator=True)
-    async def clean_duplicates(self, interaction: discord.Interaction):
-        """Ejecuta el pulido y limpieza de duplicados."""
-        await self.slash_polish_server.callback(self, interaction)
-
-    @app_commands.command(name="publicar-reglas", description="Limpia mensajes antiguos y publica el reglamento oficial extenso")
-    @app_commands.describe(canal="Canal donde se publicarán las reglas (por defecto #reglas o el actual)")
-    @app_commands.default_permissions(administrator=True)
-    async def publish_rules(self, interaction: discord.Interaction, canal: Optional[discord.TextChannel] = None):
-        await interaction.response.defer(ephemeral=True)
-        target = canal or interaction.channel
-        if not isinstance(target, discord.TextChannel):
-            await interaction.followup.send("Debes indicar un canal de texto válido.", ephemeral=True)
-            return
-
-        await purge_bot_messages(target)
-        embeds = create_server_rules_embeds()
-        try:
-            for emb in embeds:
-                await target.send(embed=emb)
-            await interaction.followup.send(f"Reglamento oficial actualizado en {target.mention}.", ephemeral=True)
-            await log_to_reports(
-                guild=interaction.guild,
-                title="Reglamento Oficial Actualizado",
-                description=f"Se limpiaron mensajes previos y se publicó el reglamento extenso en {target.mention}.",
-                action_type="setup",
-                user=interaction.user
-            )
-        except Exception as e:
-            await interaction.followup.send(f"Error al publicar reglas: {e}", ephemeral=True)
-
-    @app_commands.command(name="plantilla-proyecto", description="Limpia plantillas anteriores y publica el estándar de proyectos")
-    @app_commands.describe(enviar_al_canal="Si es True, publica y fija la plantilla en el canal actual")
-    async def publish_project_template(self, interaction: discord.Interaction, enviar_al_canal: bool = True):
-        await interaction.response.defer(ephemeral=True)
-        embed = create_project_template_embed()
-        if enviar_al_canal:
-            if not interaction.user.guild_permissions.manage_messages:
-                await interaction.followup.send("Se requieren permisos de gestión de mensajes.", ephemeral=True)
-                return
-            await purge_bot_messages(interaction.channel)
-            msg = await interaction.channel.send(embed=embed)
-            try:
-                await msg.pin()
-            except Exception:
-                pass
-            await interaction.followup.send("Estándar de proyectos actualizado en el canal.", ephemeral=True)
-        else:
-            await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @app_commands.command(name="plantilla-roadmap", description="Limpia plantillas anteriores y publica la guía de roadmaps")
-    @app_commands.describe(enviar_al_canal="Si es True, publica y fija la guía en el canal actual")
-    async def publish_roadmap_template(self, interaction: discord.Interaction, enviar_al_canal: bool = True):
-        await interaction.response.defer(ephemeral=True)
-        embed = create_roadmap_template_embed()
-        if enviar_al_canal:
-            if not interaction.user.guild_permissions.manage_messages:
-                await interaction.followup.send("Se requieren permisos de gestión de mensajes.", ephemeral=True)
-                return
-            await purge_bot_messages(interaction.channel)
-            msg = await interaction.channel.send(embed=embed)
-            try:
-                await msg.pin()
-            except Exception:
-                pass
-            await interaction.followup.send("Guía de roadmaps actualizada en el canal.", ephemeral=True)
-        else:
-            await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @app_commands.command(name="plantilla-presentacion", description="Limpia plantillas anteriores y publica el formato de presentación")
-    @app_commands.describe(enviar_al_canal="Si es True, publica y fija el formato en el canal actual")
-    async def publish_presentation_template(self, interaction: discord.Interaction, enviar_al_canal: bool = True):
-        await interaction.response.defer(ephemeral=True)
-        embed = create_presentation_template_embed()
-        if enviar_al_canal:
-            if not interaction.user.guild_permissions.manage_messages:
-                await interaction.followup.send("Se requieren permisos de gestión de mensajes.", ephemeral=True)
-                return
-            await purge_bot_messages(interaction.channel)
-            msg = await interaction.channel.send(embed=embed)
-            try:
-                await msg.pin()
-            except Exception:
-                pass
-            await interaction.followup.send("Formato de presentación actualizado en el canal.", ephemeral=True)
-        else:
-            await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
