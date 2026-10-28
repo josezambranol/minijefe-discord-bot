@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+import random
 import logging
 from collections import defaultdict, deque
 from typing import Dict, Deque, Literal
@@ -43,23 +44,35 @@ class AIChatCog(commands.Cog, name="IA y Charla Viva"):
             return
 
         clean_text = self.clean_mentions(message.content)
+        author_name = message.author.display_name
+
+        # Si solo lo mencionan por su nombre o lo llaman sin texto
         if not clean_text:
-            await message.reply(
-                "¡Qué onda compa! 👋 Aquí está el Mini Jefe presente. ¿En qué te puedo colaborar o de qué charlamos hoy?",
-                mention_author=False
-            )
+            natural_calls = [
+                f"¡Dime, {author_name}! ¿Qué pasó? 👀",
+                "¡Epa! Aquí ando presente bro, ¿qué hay? 🫡",
+                f"¡Qué hubo, {author_name}! Cuéntamelo todo, ¿en qué te colaboro?",
+                "¡Aquí estoy compa! ¿Qué se te ofrece? 😎",
+                "Presente 🙋‍♂️ Dime bro, ¿para qué soy bueno?",
+                "¡Dímelo todo! ¿Qué se cuenta por acá?",
+                f"¡Epa {author_name}! Aquí el Mini Jefe al mando, dime qué necesitas."
+            ]
+            await message.reply(random.choice(natural_calls), mention_author=False)
             return
 
         personality = settings.get("ai_personality", "amigable")
         history = list(self.channel_conversations[message.channel.id])
 
+        # Darle contexto a la IA de quién lo está llamando en el chat
+        prompt_with_context = f"[Mensaje de {author_name}]: {clean_text}"
+
         # Mostrar que el bot está escribiendo mientras consulta la IA
         async with message.channel.typing():
             try:
-                response = await ask_gemini(clean_text, personality=personality, chat_history=history)
+                response = await ask_gemini(prompt_with_context, personality=personality, chat_history=history)
             except Exception as e:
                 logger.error(f"Error procesando charla con IA: {e}")
-                response = "⚡ *El Mini Jefe se quedó recalculando la jugada... ¡Pregúntame de nuevo en un segundo!*"
+                response = f"¡Dime, {author_name}! Se me cruzaron los cables un segundo, repítemelo a ver."
 
         # Guardar en el historial de conversación del canal
         self.channel_conversations[message.channel.id].append({"role": "user", "content": clean_text})
