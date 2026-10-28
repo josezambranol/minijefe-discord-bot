@@ -172,3 +172,36 @@ def create_roles_panel_embed() -> discord.Embed:
     )
     embed.set_footer(text="Gestión de Perfil • Actualización instantánea")
     return embed
+
+def create_anniversary_embed(member: discord.Member, years: int, joined_date: datetime) -> discord.Embed:
+    """Crea un embed sobrio y conmemorativo para el aniversario de un miembro en la comunidad."""
+    guild = member.guild
+    plural = "año" if years == 1 else "años"
+    formatted_date = f"{joined_date.day:02d}/{joined_date.month:02d}/{joined_date.year}"
+
+    embed = discord.Embed(
+        title=f"Reconocimiento de Aniversario — {member.display_name}",
+        description=(
+            f"Hoy celebramos el aniversario de {member.mention} en **{guild.name}**.\n\n"
+            f"Cumple **{years} {plural}** formando parte de esta familia y comunidad de desarrollo.\n\n"
+            f"> *Agradecemos tu permanencia, constancia y contribución al crecimiento de este espacio.*"
+        ),
+        color=0xD4AF37
+    )
+    embed.add_field(
+        name="Trayectoria",
+        value=f"**{years} {plural}** en la comunidad",
+        inline=True
+    )
+    embed.add_field(
+        name="Fecha de ingreso",
+        value=f"`{formatted_date}`",
+        inline=True
+    )
+    if member.display_avatar:
+        embed.set_thumbnail(url=member.display_avatar.url)
+    embed.set_footer(
+        text=f"{guild.name} • Mérito y Agradecimiento",
+        icon_url=guild.icon.url if guild.icon else None
+    )
+    return embed

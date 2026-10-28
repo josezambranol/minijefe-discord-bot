@@ -29,7 +29,8 @@ from utils.embeds import (
     create_project_template_embed,
     create_roadmap_template_embed,
     create_presentation_template_embed,
-    create_roles_panel_embed
+    create_roles_panel_embed,
+    create_anniversary_embed
 )
 from utils.ai_service import get_gemini_api_key
 
@@ -92,7 +93,21 @@ async def run_tests():
     assert "PRESENTACIÓN" in pres.title, "Fallo en plantilla de presentación"
     roles = create_roles_panel_embed()
     assert "ROLES" in roles.title, "Fallo en panel de roles"
-    print("  ✅ Todos los embeds y plantillas construidos correctamente (10 secciones de reglas sin ruido): OK")
+
+    # Mock member for anniversary test
+    class MockMember:
+        display_name = "CarlosDev"
+        mention = "<@123456789>"
+        display_avatar = None
+        class GuildMock:
+            name = "Comunidad Dev"
+            icon = None
+        guild = GuildMock()
+
+    from datetime import datetime
+    anni = create_anniversary_embed(MockMember(), 1, datetime(2025, 10, 28))
+    assert "Aniversario" in anni.title, "Fallo en embed de aniversario"
+    print("  ✅ Todos los embeds y plantillas construidos correctamente (incluye aniversario de miembros): OK")
 
     # 4. Estado de la IA (Gemini)
     print("\n[4/5] Verificando clave de API de Gemini...")

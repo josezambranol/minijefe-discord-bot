@@ -1,15 +1,22 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import logging
 import unicodedata
 import re
+from datetime import datetime, timezone
+import pytz
 from typing import Optional
 
-from database import get_guild_settings, update_guild_setting
+from database import (
+    get_guild_settings,
+    update_guild_setting,
+    has_notification_been_sent,
+    record_notification_sent
+)
 from utils.ai_service import generate_welcome_quote
 from utils.image_generator import generate_welcome_card
-from utils.embeds import COLOR_SUCCESS, COLOR_PRIMARY
+from utils.embeds import COLOR_SUCCESS, COLOR_PRIMARY, create_anniversary_embed
 from utils.reporting import log_to_reports
 
 logger = logging.getLogger("MiniJefe.Welcome")
@@ -24,6 +31,90 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.anniversary_check_loop.start()
+
+    def cog_unload(self):
+        self.anniversary_check_loop.cancel()
+
+    async def get_announcements_channel(self, guild: discord.Guild) -> Optional[discord.TextChannel]:
+        """Localiza el canal de anuncios oficial del servidor."""
+        writable_channels = [
+            ch for ch in guild.text_channels
+            if ch.permissions_for(guild.me).send_messages
+        ]
+        for ch in writable_channels:
+            clean = normalize_channel_name(ch.name)
+            if "anuncio" in clean or "announc" in clean:
+                return ch
+        # Fallback al canal de bienvenida si no hay canal específico de anuncios
+        return await self.get_welcome_channel(guild)
+
+    async def check_guild_anniversaries(self, guild: discord.Guild):
+        """Detecta miembros que cumplen aniversario de permanencia en el servidor y publica la conmemoración en #anuncios."""
+        try:
+            settings = await get_guild_settings(guild.id)
+            tz_name = settings.get("timezone", "America/Bogota")
+            try:
+                tz = pytz.timezone(tz_name)
+            except Exception:
+                tz = pytz.timezone("America/Bogota")
+
+            now = datetime.now(tz)
+            # Solo enviar a partir de las 8:00 AM para respetar horas de descanso
+            if now.hour < 8:
+                return
+
+            announcements_ch = await self.get_announcements_channel(guild)
+            if not announcements_ch:
+                return
+
+            for member in list(guild.members):
+                if member.bot or not member.joined_at:
+                    continue
+
+                joined_local = member.joined_at.astimezone(tz)
+                if joined_local.month == now.month and joined_local.day == now.day:
+                    years = now.year - joined_local.year
+                    if years >= 1:
+                        notif_key = f"member_anniversary_{guild.id}_{member.id}_{now.year}"
+                        if await has_notification_been_sent(notif_key):
+                            continue
+
+                        embed = create_anniversary_embed(member, years, joined_local)
+                        plural = "año" if years == 1 else "años"
+                        content = f"Felicidades {member.mention} por cumplir hoy **{years} {plural}** siendo parte de la familia de **{guild.name}**."
+
+                        try:
+                            await announcements_ch.send(content=content, embed=embed)
+                            await record_notification_sent(notif_key)
+                            logger.info(f"Aniversario de {years} año(s) conmemorado para {member.display_name} en #{announcements_ch.name}")
+
+                            await log_to_reports(
+                                guild=guild,
+                                title="Aniversario de Miembro Conmemorado",
+                                description=f"Se publicó el reconocimiento por **{years} {plural}** de {member.mention} en {announcements_ch.mention}.",
+                                action_type="aniversario",
+                                user=member,
+                                fields=[
+                                    ("Miembro", f"{member.display_name} (`{member.id}`)", True),
+                                    ("Trayectoria", f"{years} {plural}", True),
+                                    ("Canal", announcements_ch.mention, True)
+                                ]
+                            )
+                        except Exception as e:
+                            logger.warning(f"Error al enviar felicitación de aniversario para {member.display_name}: {e}")
+        except Exception as e:
+            logger.error(f"Error comprobando aniversarios en {guild.name}: {e}")
+
+    @tasks.loop(minutes=30.0)
+    async def anniversary_check_loop(self):
+        """Ciclo periódico para detectar y publicar aniversarios de miembros."""
+        for guild in self.bot.guilds:
+            await self.check_guild_anniversaries(guild)
+
+    @anniversary_check_loop.before_loop
+    async def before_anniversary_loop(self):
+        await self.bot.wait_until_ready()
 
     async def get_welcome_channel(self, guild: discord.Guild) -> Optional[discord.TextChannel]:
         """
@@ -171,10 +262,11 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
         except Exception as e:
             logger.warning(f"Error registrando bienvenida en #reportes: {e}")
 
-    @app_commands.command(name="simular", description="Envía un mensaje de simulación (bienvenida, reglas, roles o reporte) para previsualización")
-    @app_commands.describe(tipo="Elemento a simular: bienvenida, reglas, roles o reporte")
+    @app_commands.command(name="simular", description="Envía un mensaje de simulación (bienvenida, reglas, roles, reporte o aniversario) para previsualización")
+    @app_commands.describe(tipo="Elemento a simular: bienvenida, reglas, roles, reporte o aniversario")
     @app_commands.choices(tipo=[
         app_commands.Choice(name="Bienvenida con tarjeta gráfica", value="bienvenida"),
+        app_commands.Choice(name="Reconocimiento de Aniversario", value="aniversario"),
         app_commands.Choice(name="Reglas simplificadas (1 línea)", value="reglas"),
         app_commands.Choice(name="Panel de Roles Técnicos", value="roles"),
         app_commands.Choice(name="Reporte Diario Autónomo", value="reporte")
@@ -184,6 +276,20 @@ class WelcomeCog(commands.Cog, name="Bienvenidas"):
         """Comando único para simular cualquier vista principal del servidor."""
         await interaction.response.defer(ephemeral=True)
         choice = (tipo or "bienvenida").lower()
+
+        if choice == "aniversario":
+            # Calcular o simular 1 año de permanencia para la previsualización
+            now_dt = datetime.now()
+            joined = interaction.user.joined_at.replace(tzinfo=None) if interaction.user.joined_at else now_dt
+            years = max(now_dt.year - joined.year, 1)
+            embed = create_anniversary_embed(interaction.user, years, joined)
+            plural = "año" if years == 1 else "años"
+            await interaction.followup.send(
+                content=f"**[Simulación — Anuncio de Aniversario]** Felicidades {interaction.user.mention} por cumplir hoy **{years} {plural}** siendo parte de la familia de **{interaction.guild.name}**.",
+                embed=embed,
+                ephemeral=True
+            )
+            return
 
         if choice == "reglas":
             from utils.embeds import create_server_rules_embeds

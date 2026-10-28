@@ -28,6 +28,7 @@ ACTION_STYLES = {
     "roles": ("Gestión de Roles", 0x6366F1),
     "recordatorio": ("Tareas y Recordatorios", COLOR_INFO),
     "bienvenida": ("Ingreso de Integrante", COLOR_PRIMARY),
+    "aniversario": ("Aniversario de Miembro", 0xD4AF37),
     "config": ("Configuración del Servidor", 0x1E293B),
     "autonomo": ("Operación Autónoma", 0x1E293B),
     "sistema": ("Estado del Sistema", COLOR_SUCCESS)
