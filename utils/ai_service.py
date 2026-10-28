@@ -7,7 +7,11 @@ import asyncio
 import aiohttp
 import urllib.request
 import urllib.error
+from dotenv import load_dotenv
 from typing import List, Dict, Optional, Any
+
+# Cargar .env si existe localmente
+load_dotenv()
 
 logger = logging.getLogger("MiniJefe.AI")
 

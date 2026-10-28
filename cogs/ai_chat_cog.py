@@ -77,7 +77,11 @@ class AIChatCog(commands.Cog, name="IA y Charla Viva"):
     @app_commands.describe(mensaje="Lo que le quieras preguntar o comentar a MiniJefe")
     async def slash_ask(self, interaction: discord.Interaction, mensaje: str):
         """Comando slash para interactuar con la IA de MiniJefe."""
-        await interaction.response.defer()
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+        except Exception:
+            pass
 
         settings = await get_guild_settings(interaction.guild_id)
         personality = settings.get("ai_personality", "amigable")
