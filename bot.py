@@ -63,11 +63,12 @@ class TaskBot(commands.Bot):
             "cogs.periodic_reminders_cog",
             "cogs.ai_chat_cog",
             "cogs.welcome_cog",
+            "cogs.roles_cog",
+            "cogs.community_cog",
             "cogs.moderation_cog",
             "cogs.daily_plans_cog",
             "cogs.admin_cog"
         ]
-
 
         for ext in extensions:
             try:
@@ -76,7 +77,15 @@ class TaskBot(commands.Bot):
             except Exception as e:
                 logger.error(f"Error al cargar cog {ext}: {e}", exc_info=True)
 
-        # 3. Sincronizar comandos slash (/)
+        # 3. Registrar vistas persistentes para que sobrevivan a reinicios
+        try:
+            from cogs.roles_cog import RolesPanelView
+            self.add_view(RolesPanelView())
+            logger.info("Vista persistente de Roles registrada con éxito.")
+        except Exception as e:
+            logger.error(f"Error al registrar vista de Roles: {e}")
+
+        # 4. Sincronizar comandos slash (/)
         logger.info("Sincronizando árbol de comandos slash con Discord...")
         try:
             synced = await self.tree.sync()
@@ -86,7 +95,7 @@ class TaskBot(commands.Bot):
 
     async def on_ready(self):
         from utils.ai_service import get_gemini_api_key
-        has_gemini = "CONECTADA ✅" if get_gemini_api_key() else "NO DETECTADA ❌ (Configura GEMINI_API_KEY en Render)"
+        has_gemini = "CONECTADA ✅" if get_gemini_api_key() else "NO DETECTADA ❌ (Configura GEMINI_API_KEY)"
 
         logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         logger.info(f"🤖 Bot conectado como: {self.user.name} ({self.user.id})")
@@ -96,7 +105,7 @@ class TaskBot(commands.Bot):
         
         activity = discord.Activity(
             type=discord.ActivityType.watching,
-            name="el servidor 24/7 | @MiniJefe o /hablar"
+            name="la comunidad dev | Servidor de Jordy"
         )
         await self.change_presence(status=discord.Status.online, activity=activity)
 

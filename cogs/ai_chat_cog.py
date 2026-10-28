@@ -46,8 +46,21 @@ class AIChatCog(commands.Cog, name="IA y Charla Viva"):
         clean_text = self.clean_mentions(message.content)
         author_name = message.author.display_name
 
+        is_jordy = (message.author.id == 710931815271235645) or (message.guild and message.author.id == message.guild.owner_id)
+        role_label = "Jordy (El Jefe y Fundador del Servidor)" if is_jordy else f"Miembro ({author_name})"
+
         # Si solo lo mencionan por su nombre o lo llaman sin texto
         if not clean_text:
+            if is_jordy:
+                boss_calls = [
+                    "¡A la orden, Jefe Jordy! 🫡 ¿Qué se le ofrece?",
+                    "¡Presente, Jefe! Dígame qué necesita y de una lo solucionamos. 🫡",
+                    "¡Epa, Jefe! Aquí el MiniJefe reportándose al 100%. ¿Qué orden tiene?",
+                    "¡A la orden, mi Jefe! Cuéntemelo todo."
+                ]
+                await message.reply(random.choice(boss_calls), mention_author=False)
+                return
+
             natural_calls = [
                 f"¡Dime, {author_name}! ¿Qué pasó? 👀",
                 "¡Epa! Aquí ando presente bro, ¿qué hay? 🫡",
@@ -55,7 +68,7 @@ class AIChatCog(commands.Cog, name="IA y Charla Viva"):
                 "¡Aquí estoy compa! ¿Qué se te ofrece? 😎",
                 "Presente 🙋‍♂️ Dime bro, ¿para qué soy bueno?",
                 "¡Dímelo todo! ¿Qué se cuenta por acá?",
-                f"¡Epa {author_name}! Aquí el Mini Jefe al mando, dime qué necesitas."
+                f"¡Epa {author_name}! Aquí el MiniJefe al mando, dime qué necesitas."
             ]
             await message.reply(random.choice(natural_calls), mention_author=False)
             return
@@ -64,7 +77,7 @@ class AIChatCog(commands.Cog, name="IA y Charla Viva"):
         history = list(self.channel_conversations[message.channel.id])
 
         # Darle contexto a la IA de quién lo está llamando en el chat
-        prompt_with_context = f"[Mensaje de {author_name}]: {clean_text}"
+        prompt_with_context = f"[Mensaje enviado por {role_label}]: {clean_text}"
 
         # Mostrar que el bot está escribiendo mientras consulta la IA
         async with message.channel.typing():

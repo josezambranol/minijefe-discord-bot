@@ -1,105 +1,112 @@
-# 🤖 MiniJefe — Bot Comunitario con IA, Recordatorios Periódicos, Anti-Spam y Bienvenidas (24/7)
+# 🤖 MiniJefe — Bot Comunitario para Desarrolladores (24/7)
 
 ![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue?logo=python)
 ![Discord.py](https://img.shields.io/badge/Discord.py-v2.7-5865F2?logo=discord)
 ![AI Powered](https://img.shields.io/badge/AI-Google%20Gemini-orange?logo=google)
+![Image Gen](https://img.shields.io/badge/Image%20Gen-Pillow%2012-brightgreen?logo=pillow)
 ![Hosted](https://img.shields.io/badge/Hosted%20on-Render%20%7C%20Local-46E3B7?logo=render)
 ![Timezone](https://img.shields.io/badge/Timezone-America%2FBogota%20(12h)-orange)
 
-**MiniJefe** es la mascota inteligente y co-líder con vida del servidor de Discord de **Jordy** (fundador del servidor) y **Jote** (dueño del bot). Equipado con la API de **Google Gemini**, MiniJefe cobra vida en el chat, recibe a los nuevos miembros, modera el spam de forma amigable, organiza la agenda diaria y permite a los líderes delegar tareas a cualquier miembro con **recordatorios periódicos automáticos** (cada 30 min, 1 hora, 2 horas, etc.) hasta que se completen.
+**MiniJefe** es la mascota inteligente y mano derecha de la comunidad de desarrolladores fundada y liderada por **Jordy** (la máxima autoridad del servidor, a quien MiniJefe llama con respeto como *"Jefe"*). 
+
+Equipado con la API de **Google Gemini** y un motor gráfico con **Pillow**, MiniJefe cobra vida en el chat, recibe a los nuevos miembros con tarjetas personalizadas de programación, administra roles en lote sin latencia, modera el spam de forma amigable, organiza la agenda diaria y permite a Jordy y al Staff delegar tareas a cualquier miembro con **recordatorios periódicos automáticos** (cada 30 min, 1 hora, 2 horas, etc.) hasta que se completen.
 
 ---
 
 ## 🌟 Funcionalidades Principales
 
-### ⏰ 1. Tareas Delegadas & Recordatorios Periódicos Flexibles
-Tanto **Jordy** como **Jote** (o el equipo de moderación/staff) pueden asignar tareas a cualquier miembro con intervalos personalizados:
-- **En lenguaje natural por chat o canal de staff:**
+### 🎭 1. Selector de Roles de Alta Velocidad (Sin Latencia)
+- **Menús desplegables (`Select Menus`) interactivos y por categorías:**
+  - 💼 **Especialidades:** Frontend, Backend, Fullstack, Mobile, DevOps, UI/UX, Data & IA, QA.
+  - 💻 **Lenguajes:** Java, Python, JavaScript/TypeScript, C/C++, C#, Rust, Go, PHP.
+  - 🔔 **Notificaciones:** Anuncios, Proyectos & Colaboración, Eventos & Talleres.
+- **Respuesta instantánea (<100ms):** Procesa selecciones por lote en memoria, eliminando la latencia y los bloqueos típicos de los bots de reacciones.
+- **Vistas Persistentes:** Siguen funcionando incluso después de que el bot se reinicie o se actualice.
+- **Comandos:**
+  - `/panel-roles`: Publica el panel interactivo en el canal oficial de `#roles`.
+  - `/crear-roles-default`: Crea automáticamente en Discord los roles dev que falten con sus colores correspondientes.
+
+---
+
+### 🎨 2. Tarjetas de Bienvenida Gráficas (Estilo Dev)
+- **Generación dinámica de imágenes con Pillow:**
+  - Renderiza una tarjeta de alta resolución (960x360 px) con fondo moderno de código y terminal.
+  - Recorta el avatar del nuevo usuario en un círculo perfecto con anillo neón brillante.
+  - Incluye el nombre, número de miembro oficial y un saludo personalizado con IA.
+- **Comandos:**
+  - `/config-bienvenida canal #canal`: Establece el canal de bienvenida.
+  - `/probar-bienvenida`: Simula una bienvenida contigo mismo para previsualizar la tarjeta gráfica.
+
+---
+
+### 📜 3. Recursos de Comunidad y Plantillas
+- **Reglamento adaptado a programadores:** Publica directrices claras sobre convivencia, formato de código (no fotos al monitor), no spam de DMs y sanciones escalonadas.
+- **Comandos oficiales:**
+  - `/publicar-reglas [canal]`: Publica el reglamento oficial en `#reglas`.
+  - `/plantilla-proyecto`: Muestra o publica el formato estructurado para el foro `#proyectos-colaboracion`.
+  - `/plantilla-roadmap`: Muestra o publica la plantilla de ruta de estudio para `#roadmaps-aprendizaje`.
+  - `/plantilla-presentacion`: Muestra o publica el formato de presentación para `#presentaciones`.
+
+---
+
+### ⏰ 4. Recordatorios Periódicos y Tareas Delegadas
+Permite a **Jordy (el Jefe)** y al Staff asignar tareas a cualquier miembro con intervalos personalizados:
+- **Por chat en lenguaje natural:**
   > `@MiniJefe recuérdale a @usuario subir el informe cada 2 horas`  
-  > `@MiniJefe ponle una tarea a @usuario de revisar los logs cada 30 minutos`  
-  > MiniJefe responderá confirmando la orden: *"¡A la orden, Jefe! 🫡 Registrado..."*
-- **Comando Slash:**
-  > `/recordar usuario:@pepito tarea:Actualizar roles del servidor cada_horas:2 por_md:True`
-- **Avisos automáticos e Interactivos:**
-  - MiniJefe envía el aviso en el canal (o por mensaje directo) cada vez que se cumple el tiempo.
-  - El mensaje incluye un botón directo: **`[✅ Marcar como Listo]`**. Al pulsarlo, la tarea se completa y los recordatorios se apagan automáticamente.
-  - Botón **`[🛑 Cancelar]`** exclusivo para Jordy, Jote o el creador de la tarea.
+  > MiniJefe confirma: *"¡A la orden, Jefe Jordy! 🫡 Recordatorio Registrado..."*
+- **Por comando slash:**
+  > `/recordar usuario:@pepito tarea:Optimizar queries de PostgreSQL cada_horas:2 por_md:True`
+- **Botón `[✅ Marcar como Listo]`:** Completa la tarea y apaga los avisos automáticamente.
+- **Botón `[🛑 Cancelar]`:** Exclusivo para Jordy, Staff o el creador de la tarea.
 - **Gestión:** `/recordatorios-activos`, `/tarea-lista [id]`, `/tarea-cancelar [id]`.
 
 ---
 
-### 🧠 2. MiniJefe "Cobra Vida" con Inteligencia Artificial (Gemini)
-- **Charla viva por mención:** Menciona a `@MiniJefe` en cualquier canal para platicar, pedirle opiniones, consejos de código o bromear.
-- **Memoria de conversación:** Mantiene el hilo contextual de los últimos mensajes del canal.
-- **Personalidades con `/personalidad`:**
-  - `amigable`: Relajado, carismático, bromista y compa del servidor *(por defecto)*.
-  - `jefe_motivador`: Alta energía y ánimo imparable.
-  - `programador`: Tech Lead / Senior Dev para resolver dudas técnicas y de programación.
-  - `tranquilo`: Compa Zen, pacífico y buena vibra.
-- **Comandos:** `/hablar [mensaje]`, `/olvidar-charla`.
+### 🧠 5. Inteligencia Artificial (Gemini) y Charla Viva
+- **Mención directa:** Menciona a `@MiniJefe` para charlar, pedir tips de código o bromear.
+- Si lo menciona **Jordy**, el bot le responde con máxima lealtad como su Jefe.
+- Si le preguntan por la jerarquía del servidor, tiene claro que Jordy es el fundador y líder absoluto (y que Jote no es el dueño).
+- **Personalidades:** `/personalidad [amigable | jefe_motivador | programador | tranquilo]`.
+- **Comando:** `/hablar [mensaje]`.
 
 ---
 
-### 👋 3. Sistema de Bienvenidas Cálidas
-- **Detección automática** de nuevos miembros (`on_member_join`).
-- **Embed estético:** Foto de perfil, contador de miembros y guía inicial.
-- **Saludo único con IA:** Redacta una bienvenida original para cada persona.
-- **Comandos:** `/config-bienvenida canal #canal`, `/probar-bienvenida`.
+### 🛡️ 6. Escudo Anti-Spam y Limpieza
+- Detecta ráfagas (flood), mensajes idénticos repetidos, mayúsculas sostenidas y menciones masivas.
+- Responde con avisos amigables que se auto-eliminan a los 12 segundos.
+- **Comandos:**
+  - `/limpiar cantidad:10 usuario:@usuario`: Purga mensajes del canal.
+  - `@MiniJefe borra 5 mensajes`: Orden rápida por chat para moderadores.
+  - `/config-antispam activar:True`: Activa o desactiva la protección.
 
 ---
 
-### 🛡️ 4. Escudo Anti-Spam Amigable
-- Detecta ráfagas (flood), mensajes repetidos idénticos, mayúsculas sostenidas y menciones masivas.
-- Responde con avisos de advertencia amigables y con humor que se auto-eliminan a los 12 segundos para no ensuciar el chat.
-- Notifica al staff si un usuario insiste tras 3 advertencias.
-- **Comando:** `/config-antispam activar [True/False]`.
+### 📅 7. Agenda Comunitaria & Briefing Matutino
+- Cada mañana publica un briefing con IA con saludo motivador y retos de programación.
+- **Comandos:** `/plan-agregar`, `/plan-hoy`, `/config-plan-diario`.
 
 ---
 
-### 📅 5. Agenda Comunitaria & Briefing Matutino
-- **Briefing matutino automático:** Cada mañana a las 8:00 AM (configurable), publica en el general el saludo con IA y las metas del día.
-- **Comandos:** `/plan-agregar`, `/plan-hoy`, `/config-plan-diario`, `/plan-diario-enviar`.
+## 🚀 Despliegue y Ejecución
 
----
+### Ejecución Local en Windows
+```powershell
+.\iniciar_bot.bat
+```
+O bien:
+```powershell
+.\.venv\Scripts\python bot.py
+```
 
-## 📖 Directorio Completo de Comandos Slash (`/`)
+### Ejecutar Pruebas Unitarias
+```powershell
+.\.venv\Scripts\python test_bot.py
+```
 
-### ⏰ Recordatorios & Tareas Delegadas
-| Comando | Descripción |
-|---|---|
-| `/recordar [usuario] [tarea] [cada_horas] [por_md]` | Asigna una tarea a un usuario con recordatorio periódico (ej. cada 2 horas). |
-| `/recordatorios-activos` | Consulta todas las tareas y recordatorios periódicos activos en el servidor. |
-| `/tarea-lista [id]` | Marca una tarea periódica como completada y detiene los avisos. |
-| `/tarea-cancelar [id]` | Cancela un recordatorio periódico activo. |
-
-### 🤖 Comunidad & Inteligencia Artificial
-| Comando | Descripción |
-|---|---|
-| `@MiniJefe [mensaje]` | Menciona al bot para charlar libremente en cualquier canal. |
-| `/hablar [mensaje]` | Conversa con la IA de MiniJefe mediante comando slash. |
-| `/personalidad [estilo]` | *(Admin)* Cambia la actitud: `amigable`, `jefe_motivador`, `programador`, `tranquilo`. |
-| `/olvidar-charla` | Reinicia la memoria de conversación en el canal actual. |
-
-### 👋 Bienvenidas & Moderación
-| Comando | Descripción |
-|---|---|
-| `/limpiar [cantidad] [usuario]` | *(Staff)* Elimina entre 1 y 100 mensajes recientes del canal (o de un usuario). |
-| `@MiniJefe borra [X] mensajes` | *(Staff)* Orden directa en el chat para purgar mensajes al instante. |
-| `/config-bienvenida [canal]` | *(Admin)* Establece el canal de bienvenida para nuevos miembros. |
-| `/probar-bienvenida` | *(Admin)* Simula una bienvenida contigo mismo para previsualizar. |
-| `/config-antispam [activar]` | *(Admin)* Enciende (`True`) o apaga (`False`) el escudo anti-spam. |
-
-### 📅 Agenda Diaria & Administración
-| Comando | Descripción |
-|---|---|
-| `/plan-agregar [actividad] [hora]` | Agrega una actividad a la agenda de la comunidad para hoy. |
-| `/plan-hoy` | Muestra el tablero interactivo de actividades del día. |
-| `/plan-diario-enviar` | *(Admin)* Envía de inmediato el resumen matutino para probarlo. |
-| `/config-plan-diario [canal] [hora]` | *(Admin)* Configura el canal y hora (0-23) para la publicación diaria. |
-| `/config ver` | *(Admin)* Visualiza el panel general de configuración del servidor. |
-
----
-
-## 🔒 Seguridad y Git
-
-El archivo `.env` que almacena tus credenciales (`DISCORD_TOKEN`, `GEMINI_API_KEY`) se encuentra registrado en `.gitignore` y **NUNCA** se sube a GitHub.
+### Despliegue en Render.com (24/7)
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `python bot.py`
+- **Variables de Entorno (Environment Variables):**
+  - `DISCORD_TOKEN`: Token de Discord Developer Portal
+  - `GEMINI_API_KEY`: API Key de Google AI Studio
+  - `PORT`: 8080 (servidor web interno de salud incluido)

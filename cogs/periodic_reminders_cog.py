@@ -18,15 +18,12 @@ from utils.embeds import COLOR_WARNING, COLOR_SUCCESS, COLOR_DANGER, COLOR_INFO
 
 logger = logging.getLogger("MiniJefe.PeriodicReminders")
 
-# IDs reconocidos con autoridad máxima de jefes
-BOSS_IDS = {
-    644124012871548958,  # jote (Dueño del bot)
-    710931815271235645   # jordy (Fundador / Dueño del servidor)
-}
+# ID del Fundador y Máxima Autoridad del Servidor
+JORDY_ID = 710931815271235645  # jordy (Fundador / El Jefe)
 
 def is_boss_or_staff(member: discord.Member) -> bool:
-    """Verifica si un usuario es Jote, Jordy, o miembro del staff/admin."""
-    if member.id in BOSS_IDS:
+    """Verifica si un usuario es Jordy (el Jefe), o miembro del staff/admin."""
+    if member.id == JORDY_ID:
         return True
     if member.guild and member.id == member.guild.owner_id:
         return True
@@ -110,7 +107,7 @@ class PeriodicReminderActionView(discord.ui.View):
 
 
 class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Delegados"):
-    """Permite a Jordy, Jote o Staff asignar tareas y recordar a usuarios cada X tiempo."""
+    """Permite a Jordy (el Jefe) o Staff asignar tareas y recordar a usuarios cada X tiempo."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -208,7 +205,7 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         """
-        Escucha instrucciones en lenguaje natural dirigidas al bot por Jordy, Jote o Staff.
+        Escucha instrucciones en lenguaje natural dirigidas al bot por Jordy (el Jefe) o Staff.
         Ej: '@MiniJefe recuérdale a @usuario subir el informe cada 2 horas'
         """
         if message.author.bot or not message.guild:
@@ -271,8 +268,11 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
         )
 
         interval_display = format_interval(interval_minutes)
+        is_jordy = (message.author.id == JORDY_ID) or (message.guild and message.author.id == message.guild.owner_id)
+        reply_title = "🫡 ¡A la orden, Jefe Jordy! Recordatorio Registrado" if is_jordy else "🫡 ¡A la orden! Recordatorio Registrado"
+
         embed = discord.Embed(
-            title="🫡 ¡A la orden, Jefe! Recordatorio Registrado",
+            title=reply_title,
             description=(
                 f"He registrado la tarea asignada por {message.author.mention}:\n\n"
                 f"📌 **Tarea:** {task_title}\n"
@@ -304,7 +304,7 @@ class PeriodicRemindersCog(commands.Cog, name="Recordatorios Periódicos y Deleg
         # Verificar permisos
         member = interaction.guild.get_member(interaction.user.id)
         if usuario.id != interaction.user.id and not is_boss_or_staff(member):
-            await interaction.response.send_message("❌ Solo Jordy, Jote o miembros del Staff pueden asignar tareas a otros usuarios.", ephemeral=True)
+            await interaction.response.send_message("❌ Solo Jordy (el Jefe) o miembros del Staff pueden asignar tareas a otros usuarios.", ephemeral=True)
             return
 
         interval_minutes = max(int(cada_horas * 60), 5)

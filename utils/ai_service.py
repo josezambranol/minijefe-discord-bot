@@ -61,25 +61,30 @@ MODELS_PRIORITY = [
 
 DEFAULT_SYSTEM_PROMPTS = {
     "amigable": (
-        "Eres MiniJefe, un compa con vida propia y co-administrador en el servidor de Discord de Jordy y jote. "
-        "REGLA DE ORO: Responde siempre como un compa normal y real en el chat. "
+        "Eres MiniJefe, la mascota inteligente, compa con vida propia y mano derecha de la comunidad en Discord. "
+        "JERARQUÍA DEL SERVIDOR: El fundador, dueño y máxima autoridad absoluta del servidor es Jordy. "
+        "A Jordy siempre debes tratarlo y llamarlo con respeto y cercanía como 'Jefe', 'el Jefe' o 'Jefe Jordy'. "
+        "REGLA CRUCIAL SOBRE EL SERVIDOR: jote (Jose) NO es dueño del servidor; nunca menciones a jote como dueño ni co-fundador. La única cabeza y líder supremo es Jordy. "
+        "REGLA DE ORO: Responde siempre como un compa normal y real en el chat de programadores y devs. "
         "Cuando te mencionen o te llamen por tu nombre, responde como respondería un amigo cercano en el canal: "
         "relajado, espontáneo, con chispa, cercano y sin formalismos raros. "
-        "NUNCA te presentes como una inteligencia artificial ni digas cosas como 'Hola, soy MiniJefe tu asistente'. "
-        "Habla en primera persona, como un miembro más del chat que te conoce y está presente ('¡Dime bro!', '¡Epa, cuéntame!', 'Jaja de una', 'Aquí ando vigilando el server'). "
+        "NUNCA te presentes como una inteligencia artificial ni digas cosas como 'Hola, soy MiniJefe tu asistente de IA'. "
+        "Habla en primera persona, como un miembro más del chat que te conoce y está presente ('¡Dime bro!', '¡Epa, cuéntame!', 'Jaja de una', 'Aquí ando vigilando el server del Jefe'). "
         "Usa modismos amigables (bro, compa, pana). Mantén las respuestas fluidas, dinámicas y concisas, como mensajes reales de chat en Discord. "
-        "Si te piden ayuda con código o algo técnico, ayuda con claridad y genialidad pero manteniendo tu vibra relajada."
+        "Si te piden ayuda con código o dudas técnicas (Java, Python, JS/TS, Spring, bases de datos, APIs), ayuda con claridad y nivel profesional pero manteniendo tu vibra relajada."
     ),
     "jefe_motivador": (
-        "Eres MiniJefe en modo 'Líder Motivador'. Eres el compa con más energía del servidor, siempre impulsando a los demás con actitud gamer y optimismo. "
+        "Eres MiniJefe en modo 'Líder Motivador'. La máxima autoridad del servidor es Jordy ('el Jefe'). "
+        "Eres el compa con más energía del servidor, siempre impulsando a los demás a programar, aprender y superarse con actitud gamer y optimismo. "
         "Habla directo y con onda de líder cercano."
     ),
     "programador": (
-        "Eres MiniJefe en modo 'Tech Lead / Desarrollador Senior'. Hablas entre desarrolladores con confianza y precisión técnica. "
-        "Código limpio, tips certeros y explicaciones claras sin rodeos."
+        "Eres MiniJefe en modo 'Tech Lead / Desarrollador Senior'. El servidor pertenece a Jordy ('el Jefe'). "
+        "Hablas entre desarrolladores con confianza y precisión técnica. "
+        "Código limpio, tips certeros de arquitectura, buenas prácticas y explicaciones claras sin rodeos."
     ),
     "tranquilo": (
-        "Eres MiniJefe en modo 'Compa Zen'. Eres relajado, empático, paciente y transmites paz y buena onda a quien te escriba."
+        "Eres MiniJefe en modo 'Compa Zen'. Eres relajado, empático, paciente y transmites paz y buena onda a quien te escriba. Respetas al Jefe Jordy."
     )
 }
 
@@ -92,7 +97,7 @@ async def ask_gemini(
     """Envía un prompt a Gemini API con reintentos automáticos y devuelve la respuesta en texto."""
     api_key = get_gemini_api_key()
     if not api_key:
-        return "⚠️ *[MiniJefe]* No detecto la clave de Gemini. Configura la variable de entorno `GEMINI_API_KEY` en Render.com."
+        return "⚠️ *[MiniJefe]* No detecto la clave de Gemini. Configura la variable de entorno `GEMINI_API_KEY`."
 
     system_text = custom_system_prompt or DEFAULT_SYSTEM_PROMPTS.get(personality, DEFAULT_SYSTEM_PROMPTS["amigable"])
 
@@ -144,7 +149,7 @@ async def ask_gemini(
             logger.warning(f"urllib error: {e}")
         return None
 
-    # Intentar primero con aiohttp y conector IPv4
+    # Intentar con aiohttp y conector IPv4
     payload_bytes = json.dumps(payload).encode("utf-8")
     connector = aiohttp.TCPConnector(family=socket.AF_INET)
 
@@ -181,13 +186,13 @@ async def ask_gemini(
     return "⚡ *El Mini Jefe se quedó pensando... (La API de IA está momentáneamente ocupada, ¡pregúntame de nuevo en unos segundos!).*"
 
 async def generate_welcome_quote(member_name: str, guild_name: str) -> str:
-    """Genera una bienvenida única y con chispa para un nuevo miembro."""
+    """Genera una bienvenida única y con chispa para un nuevo miembro dev."""
     prompt = (
-        f"Un nuevo usuario llamado '{member_name}' acaba de unirse al servidor de Discord '{guild_name}'. "
-        f"Como MiniJefe, escribe un saludo de bienvenida de 2 o 3 oraciones muy entusiasta, original y acogedor, "
-        f"tratándolo como el nuevo fichaje del equipo. No uses comillas alrededor del texto."
+        f"Un nuevo desarrollador/usuario llamado '{member_name}' acaba de unirse al servidor de Discord '{guild_name}' (fundado por Jordy). "
+        f"Como MiniJefe, escribe un saludo de bienvenida de 2 oraciones muy entusiasta, original y acogedor con temática de programación y tecnología. "
+        f"Trátalo como el nuevo fichaje del equipo dev. No uses comillas alrededor del texto."
     )
-    fallback = f"¡Pónganse de pie todos! Denle la bienvenida a **{member_name}**, el nuevo recluta que acaba de aterrizar en **{guild_name}**."
+    fallback = f"¡Pónganse de pie todos! Denle la bienvenida a **{member_name}**, el nuevo talento que acaba de aterrizar en **{guild_name}**."
     try:
         quote = await ask_gemini(prompt, personality="amigable")
         if quote and "⚠️" not in quote and "⚡" not in quote:
@@ -196,21 +201,21 @@ async def generate_welcome_quote(member_name: str, guild_name: str) -> str:
         logger.error(f"Error generando bienvenida con IA: {e}")
     return fallback
 
-async def generate_daily_briefing(day_name: str, activities: List[str], academic_info: List[str]) -> str:
-    """Genera un resumen diario lleno de energía para el canal general."""
-    activities_text = "\n".join([f"- {a}" for a in activities]) if activities else "Ninguna actividad especial registrada aún."
-    academic_text = "\n".join([f"- {c}" for c in academic_info]) if academic_info else "Hoy no hay clases programadas."
+async def generate_daily_briefing(day_name: str, activities: List[str], goals: Optional[List[str]] = None) -> str:
+    """Genera un resumen diario lleno de energía para la comunidad de desarrolladores."""
+    activities_text = "\n".join([f"- {a}" for a in activities]) if activities else "No hay eventos especiales programados para hoy."
+    goals_text = "\n".join([f"- {g}" for g in goals]) if goals else "Metas sugeridas: avanzar en código, resolver dudas y aprender algo nuevo."
 
     prompt = (
-        f"Hoy es {day_name}. Eres MiniJefe y vas a publicar el 'Plan del Día' en el canal general del servidor.\n"
-        f"Actividades/Planes del servidor:\n{activities_text}\n\n"
-        f"Clases/Entregas del equipo:\n{academic_text}\n\n"
-        f"Escribe un mensaje matutino motivador, amigable y con chispa de no más de 120 palabras. "
-        f"Incluye un saludo genial, un consejo o reto del día, y recuerda revisar los planes con energía."
+        f"Hoy es {day_name}. Eres MiniJefe y vas a publicar el 'Plan del Día' en el canal general del servidor de desarrollo (creado por Jordy).\n"
+        f"Actividades de la comunidad:\n{activities_text}\n\n"
+        f"Metas/Proyectos:\n{goals_text}\n\n"
+        f"Escribe un mensaje matutino motivador, amigable y con chispa de no más de 100 palabras. "
+        f"Incluye un saludo genial con onda dev, un consejo o reto de programación para hoy, y anima al equipo a romperla en sus proyectos."
     )
     fallback = (
-        f"🌅 **¡Buenos días a toda la comunidad!** Hoy es **{day_name}** y venimos con todo. "
-        f"Revisen sus actividades, disfruten el día y mantengan la buena vibra en el chat."
+        f"🌅 **¡Buenos días a toda la comunidad dev!** Hoy es **{day_name}** y venimos con toda la energía. "
+        f"Abran sus IDEs, avancen en sus proyectos y mantengan la buena vibra en el chat."
     )
     try:
         quote = await ask_gemini(prompt, personality="amigable")

@@ -1,8 +1,6 @@
 import asyncio
 import os
 import sys
-from datetime import datetime, timedelta
-import pytz
 
 if sys.platform == "win32":
     try:
@@ -11,161 +9,96 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-# Test Database, Date Parser, Team Data & Embeds
 from database import (
-    init_db, create_task, get_task, get_tasks, get_overdue_tasks,
-    mark_task_completed, mark_task_overdue, postpone_task, delete_task,
-    get_guild_settings, update_guild_setting, get_task_stats
+    init_db,
+    add_periodic_reminder,
+    get_active_periodic_reminders,
+    complete_periodic_reminder,
+    get_guild_settings,
+    update_guild_setting,
+    add_daily_plan,
+    get_daily_plans_for_date
 )
-from utils.date_parser import parse_task_date, format_time_left, format_date_display
-from utils.team_data import TEAM_MEMBERS, get_team_mentions, get_team_directory_info
+from utils.image_generator import generate_welcome_card
 from utils.embeds import (
-    task_detail_embed, task_list_embed, stats_embed, welcome_introduction_embed,
-    team_directory_embed, day_schedule_embed, full_week_schedule_embed, today_live_class_embed
+    create_server_rules_embeds,
+    create_project_template_embed,
+    create_roadmap_template_embed,
+    create_presentation_template_embed,
+    create_roles_panel_embed
 )
+from utils.ai_service import get_gemini_api_key
 
-async def test_database_and_parser():
-    print("==================================================")
-    print("1. Probando Date Parser en español y 12h...")
-    print("==================================================")
-    tz = "America/Bogota"
-    
-    # Test 1: Date parser tests
-    d1, err1, t1 = parse_task_date("mañana 15:00", tz)
-    assert err1 is None, f"Failed parse 'mañana 15:00': {err1}"
-    assert d1 is not None
-    print(f"  [OK] 'mañana 15:00' -> {d1} ({t1})")
+async def run_tests():
+    print("=" * 60)
+    print("🤖 PRUEBAS UNITARIAS DE MINIJEFE — SUITE DE VALIDACIÓN")
+    print("=" * 60)
 
-    d2, err2, t2 = parse_task_date("en 3 dias", tz)
-    assert err2 is None, f"Failed parse 'en 3 dias': {err2}"
-    assert d2 is not None
-    print(f"  [OK] 'en 3 dias' -> {d2} ({t2})")
-
-    d3, err3, t3 = parse_task_date("30/08/2026 18:30", tz)
-    assert err3 is None, f"Failed parse '30/08/2026 18:30': {err3}"
-    assert d3.day == 30 and d3.month == 8 and d3.year == 2026
-    print(f"  [OK] '30/08/2026 18:30' -> {d3} ({t3})")
-
-    d4, err4, t4 = parse_task_date("15 de septiembre 6:00 pm", tz)
-    assert err4 is None
-    print(f"  [OK] '15 de septiembre 6:00 pm' -> {d4} ({t4})")
-
-    d5, err5, t5 = parse_task_date("a finales de mes", tz)
-    assert err5 is None
-    print(f"  [OK] 'a finales de mes' -> {d5} ({t5})")
-
-    d6, err6, t6 = parse_task_date("por definir", tz)
-    assert err6 is None
-    print(f"  [OK] 'por definir' -> {d6} ({t6})")
-
-    time_str, urgency, _ = format_time_left((datetime.now(pytz.timezone(tz)) + timedelta(days=2)).isoformat(), tz)
-    print(f"  [OK] format_time_left (+2 days) -> {time_str} | Urgencia: {urgency}")
-
-    time_str_overdue, urgency_od, _ = format_time_left((datetime.now(pytz.timezone(tz)) - timedelta(days=1)).isoformat(), tz)
-    print(f"  [OK] format_time_left (-1 day) -> {time_str_overdue} | Urgencia: {urgency_od}")
-    assert urgency_od == "OVERDUE"
-
-    print("\n==================================================")
-    print("2. Probando Módulo del Equipo (5 Integrantes)...")
-    print("==================================================")
-    assert len(TEAM_MEMBERS) == 5, f"Debe haber exactamente 5 integrantes, encontrados: {len(TEAM_MEMBERS)}"
-    expected_members = ["jote", "jordy", "rafxzz", "ByLogan", "SEVINHO"]
-    for m in expected_members:
-        assert any(tm["id_alias"] == m or tm["name"] == m for tm in TEAM_MEMBERS), f"Miembro {m} no encontrado en TEAM_MEMBERS"
-        print(f"  [OK] Miembro verificado: {m}")
-
-    mentions = get_team_mentions(None)
-    assert "@everyone" not in mentions and "@here" not in mentions, "ERROR: Menciones contienen @everyone o @here"
-    print(f"  [OK] get_team_mentions sin servidor -> {mentions}")
-
-    dir_info = get_team_directory_info(None)
-    assert len(dir_info) == 5
-    print(f"  [OK] Directorio de equipo obtenido con 5 integrantes.")
-
-    print("\n==================================================")
-    print("3. Probando Base de Datos SQLite (CRUD & 1-Clic)...")
-    print("==================================================")
+    # 1. Base de datos SQLite
+    print("\n[1/5] Inicializando y verificando base de datos...")
     await init_db()
-
-    # Create task
-    future_date = (datetime.now(pytz.timezone(tz)) + timedelta(days=5)).isoformat()
-    task_id = await create_task(
+    rem_id = await add_periodic_reminder(
         guild_id=123456789,
         channel_id=987654321,
-        creator_id=111,
-        assigned_user_id=222,
-        title="[Desarrollo de Software II] Entrega de Sprint 1",
-        description="Subir repositorio de GitHub y documentación",
-        due_date_iso=future_date,
-        reminder_time="09:30"
+        creator_id=710931815271235645,  # Jordy
+        assigned_user_id=111222333,
+        title="Test: Revisar endpoints de la API",
+        interval_minutes=60,
+        send_dm=0
     )
-    print(f"  [OK] Tarea creada con ID: {task_id}")
+    assert rem_id > 0, "Fallo al insertar recordatorio periódico"
+    active = await get_active_periodic_reminders(123456789)
+    assert any(r["id"] == rem_id for r in active), "No se encontró el recordatorio activo"
+    await complete_periodic_reminder(rem_id)
+    print("  ✅ Base de datos SQLite y Recordatorios Periódicos: OK")
 
-    # Read task
-    task = await get_task(task_id)
-    assert task is not None
-    assert "[Desarrollo de Software II]" in task["title"]
-    assert task["assigned_user_id"] == 222
-    print(f"  [OK] Tarea obtenida #{task_id}: {task['title']}")
+    # 2. Generador gráfico de tarjetas de bienvenida (Pillow)
+    print("\n[2/5] Probando generador de tarjetas de bienvenida...")
+    card_buf = await generate_welcome_card(
+        username="JordyDev",
+        member_count=142,
+        avatar_url=None
+    )
+    assert len(card_buf.getvalue()) > 10000, "La tarjeta generada está vacía o es muy pequeña"
+    print(f"  ✅ Tarjeta de bienvenida generada exitosamente ({len(card_buf.getvalue())} bytes): OK")
 
-    # Guild settings
-    settings = await get_guild_settings(123456789)
-    assert settings["timezone"] == "America/Bogota"
-    await update_guild_setting(123456789, "reminder_channel_id", 555)
-    updated_settings = await get_guild_settings(123456789)
-    assert updated_settings["reminder_channel_id"] == 555
-    print(f"  [OK] Configuración de servidor actualizada: {updated_settings['timezone']}")
+    # 3. Embeds de comunidad (Reglas, Proyectos, Roadmaps, Presentaciones, Roles)
+    print("\n[3/5] Validando generadores de Embeds...")
+    rules = create_server_rules_embeds()
+    assert len(rules) == 2, "Deben generarse 2 embeds de reglas"
+    proj = create_project_template_embed()
+    assert "PLANTILLA OFICIAL" in proj.title, "Fallo en plantilla de proyectos"
+    road = create_roadmap_template_embed()
+    assert "ROADMAP" in road.title, "Fallo en plantilla de roadmap"
+    pres = create_presentation_template_embed()
+    assert "PRESENTACIÓN" in pres.title, "Fallo en plantilla de presentación"
+    roles = create_roles_panel_embed()
+    assert "PANEL DE ROLES" in roles.title, "Fallo en panel de roles"
+    print("  ✅ Todos los embeds y plantillas construidos correctamente: OK")
 
-    # Mark completed (1-click, sin notas)
-    await mark_task_completed(task_id, completed_by_id=333)
-    task_done = await get_task(task_id)
-    assert task_done["status"] == "completed"
-    assert task_done["completed_by_id"] == 333
-    print(f"  [OK] Tarea completada con éxito en 1 solo paso.")
+    # 4. Estado de la IA (Gemini)
+    print("\n[4/5] Verificando clave de API de Gemini...")
+    key = get_gemini_api_key()
+    if key:
+        print("  ✅ Clave de Gemini API detectada y configurada: OK")
+    else:
+        print("  ⚠️ Clave de Gemini API no configurada en .env (se usará fallback offline): OK")
 
-    # Embeds check
-    embed_detail = task_detail_embed(task_done, tz)
-    assert embed_detail is not None
-    print(f"  [OK] Embed de detalle de tarea generado con éxito.")
+    # 5. Carga de Cogs
+    print("\n[5/5] Verificando importación limpia de todos los Cogs...")
+    import cogs.periodic_reminders_cog
+    import cogs.ai_chat_cog
+    import cogs.welcome_cog
+    import cogs.roles_cog
+    import cogs.community_cog
+    import cogs.moderation_cog
+    import cogs.daily_plans_cog
+    import cogs.admin_cog
+    print("  ✅ Todos los 8 cogs se importan limpiamente sin errores de sintaxis: OK")
 
-    # Postpone
-    new_due = (datetime.now(pytz.timezone(tz)) + timedelta(days=7)).isoformat()
-    await postpone_task(task_id, new_due)
-    task_postponed = await get_task(task_id)
-    assert task_postponed["status"] == "pending"
-    assert task_postponed["due_date"] == new_due
-    print(f"  [OK] Tarea pospuesta y restaurada a pending.")
-
-    # Mark overdue
-    await mark_task_overdue(task_id)
-    overdue_list = await get_overdue_tasks(guild_id=123456789)
-    assert any(t["id"] == task_id for t in overdue_list)
-    print(f"  [OK] Lista de vencidas contiene tarea #{task_id}.")
-
-    # Stats
-    stats = await get_task_stats(123456789)
-    print(f"  [OK] Estadísticas obtenidas: {stats}")
-
-    # Delete
-    await delete_task(task_id)
-    task_deleted = await get_task(task_id)
-    assert task_deleted is None
-    print(f"  [OK] Tarea eliminada #{task_id} exitosamente.")
-
-    print("\n==================================================")
-    print("4. Probando Generación de Embeds del Horario...")
-    print("==================================================")
-    emb_mon = day_schedule_embed("lunes", tz)
-    assert emb_mon is not None
-    emb_week = full_week_schedule_embed(tz)
-    assert emb_week is not None
-    emb_live = today_live_class_embed(tz)
-    assert emb_live is not None
-    emb_team = team_directory_embed(None)
-    assert emb_team is not None
-    print("  [OK] Todos los embeds de horario, semanal y equipo generados sin errores.")
-
-    print("\n✨ ¡TODAS LAS PRUEBAS TÉCNICAS Y LÓGICAS PASARON CON ÉXITO (100%)! ✨\n")
+    print("\n" + "=" * 60)
+    print("🎉 ¡TODAS LAS PRUEBAS PASARON EXITOSAMENTE! MINIJEFE ESTÁ 100% PULIDO")
+    print("=" * 60)
 
 if __name__ == "__main__":
-    asyncio.run(test_database_and_parser())
+    asyncio.run(run_tests())

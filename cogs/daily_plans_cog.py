@@ -73,7 +73,7 @@ class DailyPlansCog(commands.Cog, name="Planes Diarios"):
         return datetime.now(tz)
 
     async def build_daily_embed(self, guild: discord.Guild, date_dt: datetime) -> discord.Embed:
-        """Construye el embed visual con el plan del día y las clases universitarias."""
+        """Construye el embed visual con el plan del día y actividades de la comunidad."""
         settings = await get_guild_settings(guild.id)
         tz_name = settings.get("timezone", "America/Bogota")
         today_str = date_dt.strftime("%Y-%m-%d")
@@ -90,7 +90,7 @@ class DailyPlansCog(commands.Cog, name="Planes Diarios"):
 
         embed = discord.Embed(
             title=f"📅 Plan y Resumen del Día — {day_name} {readable_date}",
-            description=f"💬 **Mensaje del Mini Jefe:**\n> {ai_greeting}\n",
+            description=f"💬 **Mensaje de MiniJefe:**\n> {ai_greeting}\n",
             color=0x3498DB
         )
 
@@ -137,7 +137,7 @@ class DailyPlansCog(commands.Cog, name="Planes Diarios"):
             f"✅ **¡Anotado en el plan de hoy!**\n📌 **{actividad.strip()}**{hora_display} agregado por {interaction.user.mention}."
         )
 
-    @app_commands.command(name="plan-hoy", description="Muestra el plan del día y las clases con controles interactivos")
+    @app_commands.command(name="plan-hoy", description="Muestra el plan y actividades del día con controles interactivos")
     async def view_today_plan(self, interaction: discord.Interaction):
         """Muestra el panel de planes de hoy."""
         await interaction.response.defer()
