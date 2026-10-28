@@ -83,6 +83,8 @@ Tanto **Jordy** como **Jote** (o el equipo de moderación/staff) pueden asignar 
 ### 👋 Bienvenidas & Moderación
 | Comando | Descripción |
 |---|---|
+| `/limpiar [cantidad] [usuario]` | *(Staff)* Elimina entre 1 y 100 mensajes recientes del canal (o de un usuario). |
+| `@MiniJefe borra [X] mensajes` | *(Staff)* Orden directa en el chat para purgar mensajes al instante. |
 | `/config-bienvenida [canal]` | *(Admin)* Establece el canal de bienvenida para nuevos miembros. |
 | `/probar-bienvenida` | *(Admin)* Simula una bienvenida contigo mismo para previsualizar. |
 | `/config-antispam [activar]` | *(Admin)* Enciende (`True`) o apaga (`False`) el escudo anti-spam. |

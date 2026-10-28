@@ -2,9 +2,10 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import time
+import re
 import logging
 from collections import defaultdict, deque
-from typing import Dict, Deque
+from typing import Dict, Deque, Optional
 
 from database import get_guild_settings, update_guild_setting
 from utils.embeds import COLOR_WARNING, COLOR_SUCCESS, COLOR_DANGER
@@ -48,8 +49,30 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        """Intercepta mensajes para analizar posibles conductas de spam."""
-        if not message.guild or self.is_exempt(message):
+        """Intercepta mensajes para moderación y órdenes de limpieza."""
+        if not message.guild or message.author.bot:
+            return
+
+        # 1. Orden directa de borrar mensajes por chat: '@MiniJefe borra 5 mensajes'
+        if self.bot.user and self.bot.user in message.mentions and self.is_exempt(message):
+            text = message.content.lower()
+            match = re.search(r"(?:borra|elimina|limpia|purge)\s+(\d+)", text)
+            if match:
+                count = min(int(match.group(1)), 100)
+                if message.channel.permissions_for(message.guild.me).manage_messages:
+                    try:
+                        await message.delete()
+                        deleted = await message.channel.purge(limit=count)
+                        confirm = await message.channel.send(f"🧹 ¡A la orden jefe! Se eliminaron **{len(deleted)} mensajes**.")
+                        await confirm.delete(delay=4)
+                        return
+                    except Exception as e:
+                        logger.warning(f"Error al purgar mensajes por chat: {e}")
+                else:
+                    await message.reply("❌ Necesito el permiso de **Gestionar Mensajes** (`Manage Messages`) para poder borrar mensajes de otros usuarios.", mention_author=False)
+                    return
+
+        if self.is_exempt(message):
             return
 
         settings = await get_guild_settings(message.guild.id)
@@ -191,6 +214,36 @@ class ModerationCog(commands.Cog, name="Moderación y Anti-Spam"):
             color=COLOR_SUCCESS if activar else COLOR_WARNING
         )
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="limpiar", description="Elimina una cantidad de mensajes recientes de este canal")
+    @app_commands.describe(
+        cantidad="Número de mensajes a eliminar (entre 1 y 100)",
+        usuario="Opcional: Solo borrar los mensajes de este usuario específico"
+    )
+    @app_commands.default_permissions(manage_messages=True)
+    async def purge_messages(
+        self,
+        interaction: discord.Interaction,
+        cantidad: app_commands.Range[int, 1, 100],
+        usuario: Optional[discord.Member] = None
+    ):
+        if not interaction.channel.permissions_for(interaction.guild.me).manage_messages:
+            await interaction.response.send_message("❌ No tengo el permiso de **Gestionar Mensajes** (`Manage Messages`) en este canal.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        def check(m):
+            if usuario:
+                return m.author.id == usuario.id
+            return True
+
+        try:
+            deleted = await interaction.channel.purge(limit=cantidad, check=check)
+            target_str = f" de {usuario.mention}" if usuario else ""
+            await interaction.followup.send(f"🧹 Se eliminaron con éxito **{len(deleted)} mensajes**{target_str}.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error al eliminar mensajes: {e}", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ModerationCog(bot))
